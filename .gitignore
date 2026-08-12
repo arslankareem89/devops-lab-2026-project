@@ -1,70 +1,475 @@
-# =========================
-# Terraform
-# =========================
+# ============================================================
+# CLOUD DEVOPS LAB - .gitignore
+# ============================================================
+
+
+# ============================================================
+# TERRAFORM
+# ============================================================
+
+# Terraform working directories
 .terraform/
+**/.terraform/
+
+# Terraform state files - NEVER commit
 *.tfstate
 *.tfstate.*
+**/*.tfstate
+**/*.tfstate.*
+
+# Terraform variables - may contain secrets/environment values
 *.tfvars
 *.tfvars.json
-*.tfplan
+**/*.tfvars
+**/*.tfvars.json
+
+# Exception: commit example variable files if you create them
+#!*.tfvars.example
+
+# Terraform crash logs
 crash.log
 crash.*.log
-.terraform.tfstate.lock.info
 
-# Terraform CLI
+# Terraform plan files
+*.tfplan
+*.tfplan.*
+tfplan
+planout
+
+# Terraform lock files
+# IMPORTANT:
+# Keep .terraform.lock.hcl tracked for reproducible provider versions.
+# Therefore DO NOT ignore it.
+
+# Terraform override files
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Terraform CLI configuration
 .terraformrc
 terraform.rc
 
-# =========================
-# Python
-# =========================
-__pycache__/
-*.py[cod]
-.venv/
-venv/
-env/
-.pytest_cache/
-.coverage
-htmlcov/
+# Terraform state lock
+.terraform.tfstate.lock.info
 
-# =========================
-# Environment / Secrets
-# =========================
+
+# ============================================================
+# TERRAFORM BOOTSTRAP
+# ============================================================
+
+# Bootstrap state
+terraform-bootstrap/*.tfstate
+terraform-bootstrap/*.tfstate.*
+
+# Bootstrap variables
+terraform-bootstrap/*.tfvars
+terraform-bootstrap/*.tfvars.json
+
+# Bootstrap Terraform working directory
+terraform-bootstrap/.terraform/
+
+# Bootstrap crash logs
+terraform-bootstrap/crash.log
+terraform-bootstrap/crash.*.log
+
+
+# ============================================================
+# AWS / CLOUD CREDENTIALS
+# ============================================================
+
+# AWS credentials/config should normally stay outside repository
+.aws/
+aws-credentials
+credentials
+
+# Private keys
+*.pem
+*.key
+*.p12
+*.pfx
+
+# SSH keys
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
+
+# SSH directories if accidentally copied into project
+.ssh/
+
+
+# ============================================================
+# ENVIRONMENT / SECRETS
+# ============================================================
+
 .env
 .env.*
-!.env.example
+*.env
 
-# =========================
-# Ansible
-# =========================
+# Keep examples/templates
+!.env.example
+!.env.template
+
+# Secret/config files
+secrets/
+secret/
+*.secret
+*.secrets
+*.credentials
+*.credentials.json
+
+
+# ============================================================
+# PYTHON / FLASK
+# ============================================================
+
+# Python cache
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+
+# Python virtual environments
+.venv/
+**/.venv/
+venv/
+**/venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Python packaging
+.Python
+build/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Python logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Testing / coverage
+.pytest_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.cover
+*.py.cover
+.cache/
+.hypothesis/
+nosetests.xml
+cover/
+
+# mypy / type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+
+# Ruff
+.ruff_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IPython
+profile_default/
+ipython_config.py
+
+# Pylint
+.pylint.d/
+
+# Pyright
+.pyright/
+
+
+# ============================================================
+# ANSIBLE
+# ============================================================
+
+# Ansible retry files
 *.retry
 
-# =========================
-# Jenkins
-# =========================
+# Ansible temporary files
+*.retry
+ansible/*.retry
+
+# Ansible vault password files
+.vault_password
+.vault_pass
+.vault-password
+
+# Local Ansible inventory if it contains generated/dynamic data
+ansible/inventory/*.retry
+
+
+# ============================================================
+# JENKINS
+# ============================================================
+
+# Jenkins home
 jenkins_home/
-JENKINS_HOME/
-secrets/
-*.key
 
-# =========================
-# Docker
-# =========================
+# Jenkins runtime data
+jenkins_home/**
+**/jenkins_home/
+
+# Jenkins secrets
+jenkins_home/secrets/
+jenkins_home/secret.key
+jenkins_home/secrets/master.key
+jenkins_home/secrets/hudson.util.Secret
+
+# Jenkins builds
+jenkins_home/jobs/**/builds/
+jenkins_home/jobs/**/workspace/
+jenkins_home/jobs/**/archive/
+
+# Jenkins logs
+jenkins_home/logs/
+jenkins_home/*.log
+
+# Jenkins temporary files
+jenkins_home/cache/
+jenkins_home/war/
+
+
+# ============================================================
+# DOCKER
+# ============================================================
+
+# Docker volumes
+docker/volumes/
+docker/data/
+docker/*/data/
+
+# Docker logs
+docker/*.log
+docker/logs/
+
+# Docker environment files
+docker/.env
+docker/.env.*
+!docker/.env.example
+
+# Local Docker overrides
 docker-compose.override.yml
+docker-compose.local.yml
 
-# =========================
-# Logs
-# =========================
+# Docker build context temporary files
+.docker/
+
+
+# ============================================================
+# APPLICATION LOGS
+# ============================================================
+
 *.log
+logs/
+log/
 
-# =========================
-# IDE
-# =========================
+
+# ============================================================
+# DATABASE / LOCAL DATA
+# ============================================================
+
+*.db
+*.sqlite
+*.sqlite3
+*.sqlite3-journal
+
+# Local database data
+data/
+database/data/
+
+
+# ============================================================
+# IDE / EDITORS
+# ============================================================
+
+# VS Code
 .vscode/
-.idea/
+*.code-workspace
 
-# =========================
-# OS
-# =========================
+# JetBrains
+.idea/
+*.iml
+
+# Sublime
+*.sublime-workspace
+*.sublime-project
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+.#*
+
+
+# ============================================================
+# OPERATING SYSTEM
+# ============================================================
+
+# macOS
 .DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
 Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+Desktop.ini
+
+# Linux
+*~
+.directory
+
+
+# ============================================================
+# TEMPORARY FILES
+# ============================================================
+
+*.tmp
+*.temp
+*.bak
+*.backup
+*.old
+*.orig
+
+temp/
+tmp/
+.cache/
+
+
+# ============================================================
+# BUILD / GENERATED FILES
+# ============================================================
+
+*.pid
+*.pid.lock
+
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+
+# ============================================================
+# PYTHON FRAMEWORKS / TOOLS
+# ============================================================
+
+instance/
+.webassets-cache/
+.scrapy/
+.pybuilder/
+.pyre/
+.pytype/
+.pyright/
+
+
+# ============================================================
+# STREAMLIT
+# ============================================================
+
+.streamlit/secrets.toml
+
+
+# ============================================================
+# JUPYTER
+# ============================================================
+
+.ipynb_checkpoints/
+
+
+# ============================================================
+# LOCAL DEVELOPMENT CONFIG
+# ============================================================
+
+local_settings.py
+local/
+.local/
+
+
+# ============================================================
+# GENERATED DOCUMENTATION
+# ============================================================
+
+docs/_build/
+site/
+
+
+# ============================================================
+# PROJECT-SPECIFIC LOCAL FILES
+# ============================================================
+
+# Local SSH configuration accidentally copied into project
+ssh_config
+
+# Local test outputs
+test-results/
+test-results.xml
+
+# Local deployment outputs
+deployment-output/
+deploy-output/
+
+# Local screenshots
+screenshots/
+
+
+# ============================================================
+# IMPORTANT FILES TO KEEP TRACKED
+# ============================================================
+
+# Terraform provider lock files SHOULD be committed:
+# terraform/.terraform.lock.hcl
+# terraform-bootstrap/.terraform.lock.hcl
+
+# Documentation SHOULD be committed:
+# README.md
+# docs/
+
+# Terraform source SHOULD be committed:
+# *.tf
+
+# Ansible source SHOULD be committed:
+# ansible/
+
+# Jenkins pipeline definitions SHOULD be committed:
+# Jenkinsfile
+# jenkins/Jenkinsfile
+
+# Docker source/config SHOULD be committed:
+# Dockerfile
+# docker-compose.yml
+# nginx/nginx.conf
