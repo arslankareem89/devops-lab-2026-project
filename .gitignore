@@ -7,39 +7,33 @@
 # TERRAFORM
 # ============================================================
 
-# Terraform working directories
 .terraform/
 **/.terraform/
 
-# Terraform state files - NEVER commit
+# Terraform state - NEVER COMMIT
 *.tfstate
 *.tfstate.*
 **/*.tfstate
 **/*.tfstate.*
 
-# Terraform variables - may contain secrets/environment values
+# Terraform variables - may contain secrets
 *.tfvars
 *.tfvars.json
 **/*.tfvars
 **/*.tfvars.json
 
-# Exception: commit example variable files if you create them
-#!*.tfvars.example
+# Allow safe example variable files
+!*.tfvars.example
 
-# Terraform crash logs
+# Crash logs
 crash.log
 crash.*.log
 
-# Terraform plan files
+# Terraform plans
 *.tfplan
 *.tfplan.*
 tfplan
 planout
-
-# Terraform lock files
-# IMPORTANT:
-# Keep .terraform.lock.hcl tracked for reproducible provider versions.
-# Therefore DO NOT ignore it.
 
 # Terraform override files
 override.tf
@@ -54,23 +48,20 @@ terraform.rc
 # Terraform state lock
 .terraform.tfstate.lock.info
 
+# IMPORTANT:
+# .terraform.lock.hcl is intentionally NOT ignored.
+# Provider lock files should be committed.
+
 
 # ============================================================
 # TERRAFORM BOOTSTRAP
 # ============================================================
 
-# Bootstrap state
+terraform-bootstrap/.terraform/
 terraform-bootstrap/*.tfstate
 terraform-bootstrap/*.tfstate.*
-
-# Bootstrap variables
 terraform-bootstrap/*.tfvars
 terraform-bootstrap/*.tfvars.json
-
-# Bootstrap Terraform working directory
-terraform-bootstrap/.terraform/
-
-# Bootstrap crash logs
 terraform-bootstrap/crash.log
 terraform-bootstrap/crash.*.log
 
@@ -79,7 +70,6 @@ terraform-bootstrap/crash.*.log
 # AWS / CLOUD CREDENTIALS
 # ============================================================
 
-# AWS credentials/config should normally stay outside repository
 .aws/
 aws-credentials
 credentials
@@ -90,13 +80,13 @@ credentials
 *.p12
 *.pfx
 
-# SSH keys
+# SSH private/public keys
 id_rsa
 id_rsa.pub
 id_ed25519
 id_ed25519.pub
 
-# SSH directories if accidentally copied into project
+# SSH directory accidentally copied into project
 .ssh/
 
 
@@ -108,11 +98,11 @@ id_ed25519.pub
 .env.*
 *.env
 
-# Keep examples/templates
+# Safe templates/examples
 !.env.example
 !.env.template
 
-# Secret/config files
+# Secrets
 secrets/
 secret/
 *.secret
@@ -125,13 +115,12 @@ secret/
 # PYTHON / FLASK
 # ============================================================
 
-# Python cache
 __pycache__/
 **/__pycache__/
 *.py[cod]
 *$py.class
 
-# Python virtual environments
+# Virtual environments
 .venv/
 **/.venv/
 venv/
@@ -141,7 +130,7 @@ ENV/
 env.bak/
 venv.bak/
 
-# Python packaging
+# Packaging
 .Python
 build/
 dist/
@@ -183,12 +172,13 @@ coverage.xml
 nosetests.xml
 cover/
 
-# mypy / type checking
+# Type checking
 .mypy_cache/
 .dmypy.json
 dmypy.json
 .pyre/
 .pytype/
+.pyright/
 
 # Ruff
 .ruff_cache/
@@ -203,39 +193,25 @@ ipython_config.py
 # Pylint
 .pylint.d/
 
-# Pyright
-.pyright/
-
 
 # ============================================================
 # ANSIBLE
 # ============================================================
 
-# Ansible retry files
 *.retry
 
-# Ansible temporary files
-*.retry
-ansible/*.retry
-
-# Ansible vault password files
+# Ansible Vault password files
 .vault_password
 .vault_pass
 .vault-password
-
-# Local Ansible inventory if it contains generated/dynamic data
-ansible/inventory/*.retry
 
 
 # ============================================================
 # JENKINS
 # ============================================================
 
-# Jenkins home
+# Jenkins runtime/home data
 jenkins_home/
-
-# Jenkins runtime data
-jenkins_home/**
 **/jenkins_home/
 
 # Jenkins secrets
@@ -244,16 +220,14 @@ jenkins_home/secret.key
 jenkins_home/secrets/master.key
 jenkins_home/secrets/hudson.util.Secret
 
-# Jenkins builds
+# Jenkins builds/workspaces
 jenkins_home/jobs/**/builds/
 jenkins_home/jobs/**/workspace/
 jenkins_home/jobs/**/archive/
 
-# Jenkins logs
+# Jenkins logs/cache
 jenkins_home/logs/
 jenkins_home/*.log
-
-# Jenkins temporary files
 jenkins_home/cache/
 jenkins_home/war/
 
@@ -262,7 +236,7 @@ jenkins_home/war/
 # DOCKER
 # ============================================================
 
-# Docker volumes
+# Docker volumes/data
 docker/volumes/
 docker/data/
 docker/*/data/
@@ -271,7 +245,7 @@ docker/*/data/
 docker/*.log
 docker/logs/
 
-# Docker environment files
+# Docker environment
 docker/.env
 docker/.env.*
 !docker/.env.example
@@ -280,7 +254,7 @@ docker/.env.*
 docker-compose.override.yml
 docker-compose.local.yml
 
-# Docker build context temporary files
+# Docker temporary data
 .docker/
 
 
@@ -302,7 +276,6 @@ log/
 *.sqlite3
 *.sqlite3-journal
 
-# Local database data
 data/
 database/data/
 
@@ -329,9 +302,8 @@ database/data/
 *~
 
 # Emacs
-*~
-\#*\#
 .#*
+#*#
 
 
 # ============================================================
@@ -351,8 +323,8 @@ ehthumbs.db
 Desktop.ini
 
 # Linux
-*~
 .directory
+*~
 
 
 # ============================================================
@@ -392,9 +364,6 @@ instance/
 .webassets-cache/
 .scrapy/
 .pybuilder/
-.pyre/
-.pytype/
-.pyright/
 
 
 # ============================================================
@@ -402,13 +371,6 @@ instance/
 # ============================================================
 
 .streamlit/secrets.toml
-
-
-# ============================================================
-# JUPYTER
-# ============================================================
-
-.ipynb_checkpoints/
 
 
 # ============================================================
@@ -432,44 +394,40 @@ site/
 # PROJECT-SPECIFIC LOCAL FILES
 # ============================================================
 
-# Local SSH configuration accidentally copied into project
 ssh_config
 
-# Local test outputs
 test-results/
 test-results.xml
 
-# Local deployment outputs
 deployment-output/
 deploy-output/
 
-# Local screenshots
 screenshots/
 
 
 # ============================================================
-# IMPORTANT FILES TO KEEP TRACKED
+# FILES THAT SHOULD REMAIN TRACKED
 # ============================================================
 
-# Terraform provider lock files SHOULD be committed:
-# terraform/.terraform.lock.hcl
-# terraform-bootstrap/.terraform.lock.hcl
-
-# Documentation SHOULD be committed:
-# README.md
-# docs/
-
-# Terraform source SHOULD be committed:
+# Terraform
 # *.tf
+# *.tfvars.example
+# .terraform.lock.hcl
 
-# Ansible source SHOULD be committed:
+# Ansible
 # ansible/
 
-# Jenkins pipeline definitions SHOULD be committed:
+# Jenkins
 # Jenkinsfile
 # jenkins/Jenkinsfile
 
-# Docker source/config SHOULD be committed:
+# Docker
 # Dockerfile
 # docker-compose.yml
+
+# Nginx
 # nginx/nginx.conf
+
+# Documentation
+# README.md
+# docs/
