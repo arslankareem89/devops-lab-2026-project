@@ -1,24 +1,15 @@
 data "aws_ami" "amazon_linux" {
-  most_recent = true
+  most_recent = false
   owners      = ["137112412989"]
 
   filter {
-    name   = "name"
-    values = ["al2023-ami-2023.*-x86_64"]
-  }
-
-  filter {
-    name   = "state"
-    values = ["available"]
-  }
-
-  filter {
-    name   = "architecture"
-    values = ["x86_64"]
+    name   = "image-id"
+    values = ["ami-035827357e3c7e810"]
   }
 }
 
 resource "aws_instance" "bastion" {
+
   ami                         = data.aws_ami.amazon_linux.id
   instance_type               = var.instance_type
   subnet_id                   = var.public_subnet_id
@@ -26,6 +17,15 @@ resource "aws_instance" "bastion" {
   associate_public_ip_address = true
   key_name                    = var.key_name
   iam_instance_profile        = var.instance_profile_name
+
+    user_data = <<-EOF
+    #!/bin/bash
+    mkdir -p /home/ec2-user/.ssh
+    echo '${var.ssh_public_key}' >> /home/ec2-user/.ssh/authorized_keys
+    chown -R ec2-user:ec2-user /home/ec2-user/.ssh
+    chmod 700 /home/ec2-user/.ssh
+    chmod 600 /home/ec2-user/.ssh/authorized_keys
+  EOF
 
   tags = {
     Name        = "devops-lab-bastion"
@@ -43,6 +43,14 @@ resource "aws_instance" "app" {
   associate_public_ip_address = false
   key_name                    = var.key_name
   iam_instance_profile        = var.instance_profile_name
+    user_data = <<-EOF
+    #!/bin/bash
+    mkdir -p /home/ec2-user/.ssh
+    echo '${var.ssh_public_key}' >> /home/ec2-user/.ssh/authorized_keys
+    chown -R ec2-user:ec2-user /home/ec2-user/.ssh
+    chmod 700 /home/ec2-user/.ssh
+    chmod 600 /home/ec2-user/.ssh/authorized_keys
+  EOF
 
   tags = {
     Name        = "devops-lab-app"
@@ -51,3 +59,4 @@ resource "aws_instance" "app" {
     Role        = "application"
   }
 }
+

@@ -24,7 +24,7 @@ module "security" {
   environment       = "dev"
   vpc_id            = module.vpc.vpc_id
   vpc_cidr          = module.vpc.vpc_cidr
-  admin_cidr_blocks = ["103.203.45.163/32"]
+  admin_cidr_blocks = ["103.203.45.155/32"]
 }
 
 module "iam" {
@@ -45,5 +45,6 @@ module "ec2" {
   instance_profile_name     = module.iam.instance_profile_name
   instance_type             = "t3.micro"
   key_name                  = "cloud-devops-lab-2026-key"
+  ssh_public_key            = file(pathexpand("~/.ssh/devops-lab-2026-ssh.pub"))
 }
 

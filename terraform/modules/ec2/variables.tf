@@ -38,3 +38,9 @@ variable "key_name" {
   description = "Existing AWS EC2 key pair name"
   type        = string
 }
+
+variable "ssh_public_key" {
+  description = "SSH public key to install on the bastion"
+  type        = string
+}
+
