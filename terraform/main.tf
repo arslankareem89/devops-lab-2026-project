@@ -1,3 +1,7 @@
+data "http" "my_public_ip" {
+  url = "https://checkip.amazonaws.com"
+}
+
 module "vpc" {
   source = "./modules/vpc"
 
@@ -24,7 +28,7 @@ module "security" {
   environment       = "dev"
   vpc_id            = module.vpc.vpc_id
   vpc_cidr          = module.vpc.vpc_cidr
-  admin_cidr_blocks = ["103.203.45.155/32"]
+  admin_cidr_blocks = ["${trimspace(data.http.my_public_ip.response_body)}/32"]
 }
 
 module "iam" {
@@ -47,4 +51,6 @@ module "ec2" {
   key_name                  = "cloud-devops-lab-2026-key"
   ssh_public_key            = file(pathexpand("~/.ssh/devops-lab-2026-ssh.pub"))
 }
+
+
 
