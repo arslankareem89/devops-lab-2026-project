@@ -37,10 +37,13 @@ services:
     restart: unless-stopped
 
   jenkins:
-    image: jenkins/jenkins:2.568.2-jdk21
+    build:
+      context: .
+      dockerfile: docker/jenkins/Dockerfile
+    image: cloud-devops-jenkins:latest
     container_name: jenkins
     environment:
-      JENKINS_OPTS: --prefix=/jenkins
+      JENKINS_OPTS: "--prefix=/jenkins"
     expose:
       - "8080"
     ports:
@@ -70,8 +73,8 @@ services:
     image: grafana/grafana:12.1.1
     container_name: grafana
     environment:
-      GF_SERVER_ROOT_URL: http://localhost/grafana/
-      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      GF_SERVER_ROOT_URL: "http://localhost/grafana"
+      GF_SERVER_SERVE_FROM_SUB_PATH: "false"
     expose:
       - "3000"
     volumes:
@@ -95,6 +98,8 @@ services:
       - jenkins
       - sonarqube
       - grafana
+      - prometheus
+      - alertmanager
     ports:
       - "80:80"
     volumes:

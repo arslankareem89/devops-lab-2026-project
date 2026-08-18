@@ -1,0 +1,42 @@
+---
+- name: Install application dependencies
+  hosts: apps
+  become: yes
+
+  tasks:
+
+    - name: Install required packages
+      dnf:
+        name:
+          - python3
+          - python3-pip
+          - python3-devel
+          - git
+        state: present
+
+    - name: Check Python
+      command: python3 --version
+      register: python_version
+      changed_when: false
+
+    - name: Show Python version
+      debug:
+        msg: "{{ python_version.stdout }}"
+
+    - name: Check pip
+      command: python3 -m pip --version
+      register: pip_version
+      changed_when: false
+
+    - name: Show pip version
+      debug:
+        msg: "{{ pip_version.stdout }}"
+
+    - name: Check Git
+      command: git --version
+      register: git_version
+      changed_when: false
+
+    - name: Show Git version
+      debug:
+        msg: "{{ git_version.stdout }}"

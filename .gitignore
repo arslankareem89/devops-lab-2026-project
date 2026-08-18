@@ -25,3 +25,4 @@ __pycache__/
 ansible/.vault_pass
 terraform/bootstrap/terraform.tfvars
 terraform/*.tfvars
+venv/
