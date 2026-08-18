@@ -20,3 +20,8 @@ __pycache__/
 # ide
 .vscode/
 .idea/
+.pytest_cache/
+.ruff_cache/
+ansible/.vault_pass
+terraform/bootstrap/terraform.tfvars
+terraform/*.tfvars

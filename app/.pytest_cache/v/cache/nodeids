@@ -1,4 +1,0 @@
-[
-  "tests/test_app.py::test_health",
-  "tests/test_app.py::test_home"
-]
