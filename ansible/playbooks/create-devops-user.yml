@@ -1,0 +1,27 @@
+---
+- name: Create devops user
+  hosts: all
+  become: yes
+
+  tasks:
+    - name: Create devops user
+      user:
+        name: devops
+        groups: wheel
+        append: yes
+        shell: /bin/bash
+        create_home: yes
+
+    - name: Add SSH key for devops user
+      authorized_key:
+        user: devops
+        state: present
+        key: "{{ lookup('file', lookup('env', 'HOME') + '/.ssh/devops-lab-2026-ssh.pub') }}"
+
+    - name: Allow wheel group to use sudo
+      copy:
+        dest: /etc/sudoers.d/devops
+        content: "%wheel ALL=(ALL) NOPASSWD: ALL\n"
+        owner: root
+        group: root
+        mode: '0440'

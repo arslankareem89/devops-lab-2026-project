@@ -1,0 +1,33 @@
+---
+- name: Configure Fail2Ban
+  hosts: all
+  become: yes
+
+  tasks:
+    - name: Install Fail2Ban
+      dnf:
+        name: fail2ban
+        state: present
+
+    - name: Create SSH jail
+      copy:
+        dest: /etc/fail2ban/jail.d/sshd.local
+        mode: '0644'
+        content: |
+          [sshd]
+          enabled = true
+          port = ssh
+          maxretry = 5
+          bantime = 10m
+          findtime = 10m
+
+    - name: Enable and start Fail2Ban
+      service:
+        name: fail2ban
+        state: started
+        enabled: yes
+
+    - name: Restart Fail2Ban
+      service:
+        name: fail2ban
+        state: restarted
