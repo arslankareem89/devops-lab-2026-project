@@ -4,7 +4,6 @@ pipeline {
 
     environment {
         IMAGE_NAME = "arslankareem89/cloud-devops-app"
-        SONAR_TOKEN = credentials('sonar-token')
     }
 
     stages {
@@ -30,6 +29,7 @@ pipeline {
                 dir('app') {
                     sh '''
                         . venv/bin/activate
+
                         pip install --upgrade pip
                         pip install -r requirements.txt
                         pip install -r requirements-dev.txt
@@ -63,14 +63,20 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 dir('app') {
+
                     withSonarQubeEnv('sonarqube') {
-                        sh '''
-                            sonar-scanner \
-                              -Dsonar.projectKey=cloud-devops-app \
-                              -Dsonar.sources=. \
-                              -Dsonar.host.url=http://sonarqube:9000 \
-                              -Dsonar.token=${SONAR_TOKEN}
-                        '''
+
+                        script {
+                            def scannerHome = tool 'sonar-scanner'
+
+                            sh """
+                                ${scannerHome}/bin/sonar-scanner \
+                                  -Dsonar.projectKey=cloud-devops-app \
+                                  -Dsonar.sources=. \
+                                  -Dsonar.host.url=http://sonarqube:9000 \
+                                  -Dsonar.token=${SONAR_TOKEN}
+                            """
+                        }
                     }
                 }
             }
@@ -91,8 +97,8 @@ pipeline {
 
                     sh """
                         docker build \
-                            -t ${IMAGE_NAME}:${TAG} \
-                            ./app
+                          -t ${IMAGE_NAME}:${TAG} \
+                          ./app
                     """
                 }
             }
@@ -101,6 +107,7 @@ pipeline {
         stage('Docker Push') {
             steps {
                 script {
+
                     def TAG = env.BRANCH_NAME == 'main' ? 'latest' : 'dev'
 
                     withCredentials([
@@ -110,6 +117,7 @@ pipeline {
                             passwordVariable: 'PASS'
                         )
                     ]) {
+
                         sh '''
                             echo "$PASS" | docker login \
                                 -u "$USER" \
