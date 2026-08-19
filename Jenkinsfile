@@ -1,3 +1,4 @@
+
 pipeline {
 
     agent any
@@ -67,7 +68,6 @@ pipeline {
                     withSonarQubeEnv('sonarqube') {
 
                         script {
-
                             def scannerHome = tool 'sonar-scanner'
 
                             withCredentials([
@@ -76,13 +76,11 @@ pipeline {
                                     variable: 'SONAR_TOKEN'
                                 )
                             ]) {
-
                                 sh """
                                     ${scannerHome}/bin/sonar-scanner \
                                       -Dsonar.projectKey=cloud-devops-app \
                                       -Dsonar.sources=. \
-                                      -Dsonar.host.url=http://sonarqube:9000 \
-                                      -Dsonar.token=\\\$SONAR_TOKEN
+                                      -Dsonar.token=\$SONAR_TOKEN
                                 """
                             }
                         }
@@ -102,7 +100,6 @@ pipeline {
         stage('Docker Build') {
             steps {
                 script {
-
                     def TAG = env.BRANCH_NAME == 'main' ? 'latest' : 'dev'
 
                     sh """
@@ -117,7 +114,6 @@ pipeline {
         stage('Docker Push') {
             steps {
                 script {
-
                     def TAG = env.BRANCH_NAME == 'main' ? 'latest' : 'dev'
 
                     withCredentials([
