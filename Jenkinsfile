@@ -10,8 +10,12 @@ pipeline {
         stage('Local Check') {
             steps {
                 sh '''
+                    echo "=== Workspace Contents ==="
+                    ls -la "$WORKSPACE"
+                    ls -la "$WORKSPACE/app" || echo "app directory not found"
+                    echo "=== Running Docker ==="
                     docker run --rm -v "$WORKSPACE:/workspace" -w /workspace python:3.14-slim sh -c \
-                    "pip install -r app/requirements-dev.txt && ruff check app/ && cd app && pytest -v"
+                    "ls -la /workspace/app/ && pip install -r app/requirements-dev.txt && ruff check app/ && cd app && pytest -v"
                 '''
             }
         }
