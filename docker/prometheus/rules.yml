@@ -1,0 +1,27 @@
+groups:
+- name: monitoring
+  rules:
+  - alert: JenkinsDown
+    expr: up{job="jenkins"} == 0
+    for: 5m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Jenkins is down"
+      description: "Jenkins has been unreachable for more than 5 minutes"
+
+  - alert: SonarQubeDown
+    expr: up{job="sonarqube"} == 0
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "SonarQube is down"
+
+  - alert: AppDown
+    expr: up{job="app"} == 0
+    for: 2m
+    labels:
+      severity: critical
+    annotations:
+      summary: "App is down"

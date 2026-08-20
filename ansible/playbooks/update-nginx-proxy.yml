@@ -1,0 +1,36 @@
+---
+- name: Update nginx reverse proxy with CI instance IP
+  hosts: apps
+  become: yes
+  vars:
+    ci_private_ip: "{{ lookup('env', 'CI_PRIVATE_IP') }}"
+
+  tasks:
+    - name: Replace CI private IP in nginx config
+      replace:
+        path: /home/ec2-user/devops-lab/nginx/nginx.conf
+        regexp: 'CI_PRIVATE_IP'
+        replace: '{{ ci_private_ip }}'
+
+    - name: Replace CI private IP in prometheus config
+      replace:
+        path: /home/ec2-user/devops-lab/docker/prometheus/prometheus.yml
+        regexp: 'CI_PRIVATE_IP'
+        replace: '{{ ci_private_ip }}'
+
+    - name: Restart nginx container
+      command: docker-compose restart nginx
+      args:
+        chdir: /home/ec2-user/devops-lab
+
+    - name: Restart prometheus container
+      command: docker-compose restart prometheus
+      args:
+        chdir: /home/ec2-user/devops-lab
+
+    - name: Print proxy configuration
+      debug:
+        msg: |
+          Reverse proxy updated:
+            /jenkins/  -> {{ ci_private_ip }}:8080
+            /sonar/    -> {{ ci_private_ip }}:9000

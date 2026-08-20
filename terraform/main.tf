@@ -47,7 +47,8 @@ module "ec2" {
   bastion_security_group_id = module.security.bastion_security_group_id
   app_security_group_id     = module.security.app_security_group_id
   instance_profile_name     = module.iam.instance_profile_name
-  instance_type             = "t3.micro"
+   instance_type             = "t3.micro"
+   ci_instance_type          = "c7i-flex.large"
   key_name                  = "cloud-devops-lab-2026-key"
   ssh_public_key            = file(pathexpand("~/.ssh/devops-lab-2026-ssh.pub"))
 }
