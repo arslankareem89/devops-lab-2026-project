@@ -44,3 +44,9 @@ variable "ssh_public_key" {
   type        = string
 }
 
+variable "ci_instance_type" {
+  description = "CI/CD EC2 instance type (Jenkins + SonarQube + PostgreSQL)"
+  type        = string
+  default     = "c7i-flex.large"
+}
+

@@ -1,0 +1,52 @@
+---
+- name: Deploy Flask app to EC2
+  hosts: apps
+  become: yes
+  vars:
+    image_tag: "{{ lookup('env', 'IMAGE_TAG') | default('latest') }}"
+    dockerhub_user: "{{ lookup('env', 'DOCKERHUB_USER') }}"
+    dockerhub_pass: "{{ lookup('env', 'DOCKERHUB_PASS') }}"
+
+  tasks:
+    - name: Login to DockerHub
+      command: docker login -u {{ dockerhub_user }} -p {{ dockerhub_pass }}
+      no_log: true
+
+    - name: Pull latest app image
+      command: "docker pull arslankareem89/cloud-devops-app:{{ image_tag }}"
+
+    - name: Stop existing app container
+      command: docker stop devops-lab-app
+      ignore_errors: true
+      changed_when: false
+
+    - name: Remove existing app container
+      command: docker rm devops-lab-app
+      ignore_errors: true
+      changed_when: false
+
+    - name: Run app container
+      command: >
+        docker run -d --name devops-lab-app
+        --restart unless-stopped
+        -p 5000:5000
+        arslankareem89/cloud-devops-app:{{ image_tag }}
+
+    - name: Verify app is running
+      command: docker ps
+      register: running_containers
+      changed_when: false
+
+    - name: Check app health
+      uri:
+        url: "http://localhost:5000/health"
+        return_content: true
+      register: health_check
+      retries: 5
+      delay: 10
+      until: health_check.status == 200
+      ignore_errors: true
+
+    - name: Print app status
+      debug:
+        msg: "App deployed and running on port 5000"

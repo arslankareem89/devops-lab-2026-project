@@ -1,0 +1,15 @@
+---
+- name: Baseline server check
+  import_playbook: baseline.yml
+
+- name: Install Docker
+  import_playbook: install-docker.yml
+
+- name: Create devops user
+  import_playbook: create-devops-user.yml
+
+- name: SSH hardening
+  import_playbook: ssh-hardening.yml
+
+- name: Configure Fail2Ban
+  import_playbook: fail2ban.yml

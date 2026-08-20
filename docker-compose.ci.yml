@@ -1,0 +1,69 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: sonar-postgres
+    environment:
+      POSTGRES_USER: sonar
+      POSTGRES_PASSWORD: sonar
+      POSTGRES_DB: sonarqube
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  sonarqube:
+    image: sonarqube:community
+    container_name: sonarqube
+    depends_on:
+      - postgres
+    environment:
+      SONAR_JDBC_URL: jdbc:postgresql://postgres:5432/sonarqube
+      SONAR_JDBC_USERNAME: sonar
+      SONAR_JDBC_PASSWORD: sonar
+      SONAR_WEB_CONTEXT: /sonar
+    ports:
+      - "9000:9000"
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_extensions:/opt/sonarqube/extensions
+      - sonarqube_logs:/opt/sonarqube/logs
+    labels:
+      - prometheus.io/scrape=true
+      - prometheus.io/port=9000
+    restart: unless-stopped
+
+  jenkins:
+    image: jenkins/jenkins:2.568.2-jdk21
+    container_name: jenkins
+    environment:
+      JENKINS_OPTS: --prefix=/jenkins
+      JAVA_OPTS: -Djenkins.metrics.enabled=true
+    ports:
+      - "8080:8080"
+      - "50000:50000"
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /usr/bin/docker:/usr/bin/docker
+    labels:
+      - prometheus.io/scrape=true
+      - prometheus.io/port=8080
+    restart: unless-stopped
+
+  cloudwatch-agent:
+    image: amazon/cloudwatch-agent:latest
+    container_name: cloudwatch-agent
+    volumes:
+      - /var/log:/var/log:ro
+      - /proc:/proc:ro
+      - /etc/hostname:/etc/hostname:ro
+      - ./docker/cloudwatch/config.json:/etc/cwagentconfig/amazon-cloudwatch-agent.json:ro
+    environment:
+      - CW_LOG_GROUP_NAME=devops-lab-ec2-logs
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  sonarqube_data:
+  sonarqube_extensions:
+  sonarqube_logs:
+  jenkins_home:

@@ -22,3 +22,13 @@ output "app_private_ip" {
   description = "Application private IP"
   value       = aws_instance.app.private_ip
 }
+
+output "ci_instance_id" {
+  description = "CI EC2 instance ID"
+  value       = aws_instance.ci.id
+}
+
+output "ci_private_ip" {
+  description = "CI instance private IP"
+  value       = aws_instance.ci.private_ip
+}

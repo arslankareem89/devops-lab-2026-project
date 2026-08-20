@@ -23,6 +23,16 @@ output "app_private_ip" {
   value       = module.ec2.app_private_ip
 }
 
+output "ci_instance_id" {
+  description = "CI EC2 instance ID"
+  value       = module.ec2.ci_instance_id
+}
+
+output "ci_private_ip" {
+  description = "CI instance private IP"
+  value       = module.ec2.ci_private_ip
+}
+
 output "vpc_id" {
   description = "VPC ID"
   value       = module.vpc.vpc_id
