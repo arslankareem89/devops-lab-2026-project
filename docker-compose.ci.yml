@@ -34,6 +34,7 @@ services:
   jenkins:
     image: jenkins/jenkins:2.568.2-jdk21
     container_name: jenkins
+    user: root
     environment:
       JENKINS_OPTS: --prefix=/jenkins
       JAVA_OPTS: -Djenkins.metrics.enabled=true
@@ -44,9 +45,6 @@ services:
       - jenkins_home:/var/jenkins_home
       - /var/run/docker.sock:/var/run/docker.sock
       - /usr/bin/docker:/usr/bin/docker
-    group_add:
-      - "1000"
-      - "993"
     labels:
       - prometheus.io/scrape=true
       - prometheus.io/port=8080
