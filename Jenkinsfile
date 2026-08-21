@@ -47,11 +47,14 @@ pipeline {
 
                             WORKSPACE_HOST="/var/lib/docker/volumes/devops-lab_jenkins_home/_data/workspace/$(basename "$WORKSPACE")"
 
+                            # SonarQube runs behind the /sonar web context on the devops-lab_default network
+                            SONAR_HOST_URL="http://sonarqube:9000/sonar"
+
                             echo "Workspace: $WORKSPACE_HOST"
                             echo "SonarQube URL: $SONAR_HOST_URL"
 
                             docker run --rm \
-                              --network ec2-user_default \
+                              --network devops-lab_default \
                               -v "$WORKSPACE_HOST:/workspace" \
                               -w /workspace \
                               -e SONAR_HOST_URL="$SONAR_HOST_URL" \
