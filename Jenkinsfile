@@ -1,43 +1,66 @@
 pipeline {
     agent any
+
     environment {
-        IMAGE_NAME = "arslankareed89/cloud-devops-app"
+        IMAGE_NAME = "arslankareem89/cloud-devops-app"
         APP_HOST   = "10.0.2.126"
     }
+
     stages {
-        stage('Checkout') { steps { checkout scm } }
+
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
 
         stage('Local Check') {
             steps {
                 sh '''
+                    set -e
+
                     WORKSPACE_HOST="/var/lib/docker/volumes/devops-lab_jenkins_home/_data/workspace/$(basename "$WORKSPACE")"
-                    docker run --rm -v "$WORKSPACE_HOST:/workspace" -w /workspace python:3.14-slim sh -c \
-                    "pip install -r app/requirements-dev.txt && ruff check app/ && cd app && pytest -v"
+
+                    echo "Running local checks..."
+                    echo "Workspace: $WORKSPACE_HOST"
+
+                    docker run --rm \
+                      -v "$WORKSPACE_HOST:/workspace" \
+                      -w /workspace \
+                      python:3.14-slim \
+                      sh -c 'pip install -r app/requirements-dev.txt && ruff check app/ && cd app && pytest -v'
                 '''
             }
         }
 
         stage('SonarQube Analysis') {
             steps {
-                script {
-                    def workspaceHost
-                    withSonarQubeEnv('sonarqube') {
-                        withCredentials([string(credentialsId: 'SONAR_TOKEN', variable: 'SONAR_TOKEN')]) {
-                            sh """
-                                WORKSPACE_HOST=\"/var/lib/docker/volumes/devops-lab_jenkins_home/_data/workspace/$(basename \"\$WORKSPACE\")\"
-                                echo "WORKSPACE_HOST: \${WORKSPACE_HOST}"
-                                echo "SONAR_HOST_URL: ${SONAR_HOST_URL}"
-                                echo "SONAR_TOKEN length: \${#SONAR_TOKEN}"
-                                docker run --rm \\
-                                  -v "\${WORKSPACE_HOST}:/workspace" \\
-                                  -w /workspace \\
-                                  -e SONAR_HOST_URL="${SONAR_HOST_URL}" \\
-                                  -e SONAR_TOKEN="${env.SONAR_TOKEN}" \\
-                                  sonarsource/sonar-scanner-cli:latest \\
-                                  -Dsonar.sources=app \\
-                                  -Dsonar.projectKey=devops-lab-app
-                            """
-                        }
+                withSonarQubeEnv('sonarqube') {
+                    withCredentials([
+                        string(
+                            credentialsId: 'SONAR_TOKEN',
+                            variable: 'SONAR_TOKEN'
+                        )
+                    ]) {
+                        sh '''
+                            set -e
+
+                            WORKSPACE_HOST="/var/lib/docker/volumes/devops-lab_jenkins_home/_data/workspace/$(basename "$WORKSPACE")"
+
+                            echo "Workspace: $WORKSPACE_HOST"
+                            echo "SonarQube URL: $SONAR_HOST_URL"
+
+                            docker run --rm \
+                              -v "$WORKSPACE_HOST:/workspace" \
+                              -w /workspace \
+                              -e SONAR_HOST_URL="$SONAR_HOST_URL" \
+                              -e SONAR_TOKEN="$SONAR_TOKEN" \
+                              sonarsource/sonar-scanner-cli:latest \
+                              -Dsonar.sources=app \
+                              -Dsonar.projectKey=devops-lab-app \
+                              -Dsonar.host.url="$SONAR_HOST_URL" \
+                              -Dsonar.token="$SONAR_TOKEN"
+                        '''
                     }
                 }
             }
@@ -45,7 +68,7 @@ pipeline {
 
         stage('Quality Gate') {
             steps {
-                timeout(time: 1, unit: 'MINUTES') {
+                timeout(time: 5, unit: 'MINUTES') {
                     waitForQualityGate abortPipeline: true
                 }
             }
@@ -55,10 +78,32 @@ pipeline {
             steps {
                 script {
                     def TAG = env.BRANCH_NAME == 'main' ? 'latest' : 'dev'
-                    sh "docker build -t ${IMAGE_NAME}:${TAG} ./app"
-                    withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DOCKERHUB_USER', passwordVariable: 'DOCKERHUB_PASS')]) {
-                        sh 'echo $DOCKERHUB_PASS | docker login -u $DOCKERHUB_USER --password-stdin'
-                        sh "docker push ${IMAGE_NAME}:${TAG}"
+
+                    echo "Building Docker image:"
+                    echo "${IMAGE_NAME}:${TAG}"
+
+                    sh """
+                        docker build \
+                          -t ${IMAGE_NAME}:${TAG} \
+                          ./app
+                    """
+
+                    withCredentials([
+                        usernamePassword(
+                            credentialsId: 'dockerhub-creds',
+                            usernameVariable: 'DOCKERHUB_USER',
+                            passwordVariable: 'DOCKERHUB_PASS'
+                        )
+                    ]) {
+                        sh '''
+                            echo "$DOCKERHUB_PASS" | docker login \
+                                -u "$DOCKERHUB_USER" \
+                                --password-stdin
+                        '''
+
+                        sh """
+                            docker push ${IMAGE_NAME}:${TAG}
+                        """
                     }
                 }
             }
@@ -68,31 +113,89 @@ pipeline {
             steps {
                 script {
                     def TAG = env.BRANCH_NAME == 'main' ? 'latest' : 'dev'
+
                     withCredentials([
-                        usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DOCKERHUB_USER', passwordVariable: 'DOCKERHUB_PASS'),
-                        sshUserPrivateKey(credentialsId: 'APP_SSH_KEY', keyVariable: 'APP_SSH_KEY')
+                        usernamePassword(
+                            credentialsId: 'dockerhub-creds',
+                            usernameVariable: 'DOCKERHUB_USER',
+                            passwordVariable: 'DOCKERHUB_PASS'
+                        ),
+                        sshUserPrivateKey(
+                            credentialsId: 'APP_SSH_KEY',
+                            keyFileVariable: 'SSH_KEY'
+                        )
                     ]) {
+
                         sh '''
+                            set -e
+
                             mkdir -p ~/.ssh
-                            echo "$APP_SSH_KEY" > ~/.ssh/app_key
-                            chmod 600 ~/.ssh/app_key
-                            ssh -o StrictHostKeyChecking=no -i ~/.ssh/app_key ec2-user@10.0.2.126 "
-                                echo '$DOCKERHUB_PASS' | docker login -u '$DOCKERHUB_USER' --password-stdin 2>/dev/null
-                                docker stop devops-lab-app 2>/dev/null || true
-                                docker rm devops-lab-app 2>/dev/null || true
-                                docker run -d --name devops-lab-app --restart unless-stopped -p 5000:5000 arslankareem89/cloud-devops-app:dev
-                                sleep 2
-                                curl -sf http://localhost:5000/health && echo 'Deploy OK' || echo 'Deploy FAILED'
-                            "
+                            chmod 700 ~/.ssh
+
+                            chmod 600 "$SSH_KEY"
+
+                            ssh-keyscan -H "$APP_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+                            echo "Deploying to $APP_HOST"
                         '''
+
+                        sh """
+                            ssh -o StrictHostKeyChecking=no \
+                                -i "$SSH_KEY" \
+                                ec2-user@${APP_HOST} '
+                                    echo "Logging into Docker Hub..."
+
+                                    echo "${DOCKERHUB_PASS}" | docker login \
+                                        -u "${DOCKERHUB_USER}" \
+                                        --password-stdin
+
+                                    echo "Stopping old container..."
+
+                                    docker stop devops-lab-app 2>/dev/null || true
+
+                                    docker rm devops-lab-app 2>/dev/null || true
+
+                                    echo "Pulling new image..."
+
+                                    docker pull ${IMAGE_NAME}:${TAG}
+
+                                    echo "Starting new container..."
+
+                                    docker run -d \
+                                        --name devops-lab-app \
+                                        --restart unless-stopped \
+                                        -p 5000:5000 \
+                                        ${IMAGE_NAME}:${TAG}
+
+                                    sleep 5
+
+                                    echo "Checking application health..."
+
+                                    if curl -sf http://localhost:5000/health; then
+                                        echo "Deploy OK"
+                                    else
+                                        echo "Deploy FAILED"
+                                        exit 1
+                                    fi
+                                '
+                        """
                     }
                 }
             }
         }
     }
+
     post {
-        always { cleanWs() }
-        success { echo "Pipeline succeeded!" }
-        failure { echo "Pipeline failed" }
+        always {
+            cleanWs()
+        }
+
+        success {
+            echo "Pipeline succeeded!"
+        }
+
+        failure {
+            echo "Pipeline failed!"
+        }
     }
 }
