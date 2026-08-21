@@ -6,11 +6,10 @@ pipeline {
     }
     stages {
         stage('Checkout') { steps { checkout scm } }
-        
+
         stage('Local Check') {
             steps {
                 sh '''
-                    # Map the container's workspace path to host's perspective
                     WORKSPACE_HOST=/var/lib/docker/volumes/devops-lab_jenkins_home/_data/workspace/$(basename "$WORKSPACE")
                     docker run --rm -v "$WORKSPACE_HOST:/workspace" -w /workspace python:3.14-slim sh -c \
                     "pip install -r app/requirements-dev.txt && ruff check app/ && cd app && pytest -v"
@@ -21,10 +20,22 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 withSonarQubeEnv('sonarqube') {
-                    dir('app') { sh 'sonar-scanner' }
+                    dir('app') {
+                        sh '''
+                            WORKSPACE_HOST=/var/lib/docker/volumes/devops-lab_jenkins_home/_data/workspace/$(basename "$WORKSPACE")
+                            docker run --rm \
+                              -v "$WORKSPACE_HOST:/workspace" \
+                              -w /workspace \
+                              -e SONAR_HOST_URL="$SONAR_HOST_URL" \
+                              -e SONAR_TOKEN="$SONAR_TOKEN" \
+                              sonarsource/sonar-scanner-cli:latest \
+                              -Dsonar.sources=.
+                        '''
+                    }
                 }
             }
         }
+
         stage('Quality Gate') {
             steps {
                 timeout(time: 1, unit: 'MINUTES') {
@@ -32,6 +43,7 @@ pipeline {
                 }
             }
         }
+
         stage('Docker Build & Push') {
             steps {
                 script {
@@ -44,6 +56,7 @@ pipeline {
                 }
             }
         }
+
         stage('Deploy') {
             steps {
                 script {

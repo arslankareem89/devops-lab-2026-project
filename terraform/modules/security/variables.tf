@@ -23,4 +23,5 @@ variable "vpc_cidr" {
 variable "admin_cidr_blocks" {
   description = "CIDR blocks allowed to SSH to the bastion"
   type        = list(string)
+  
 }
