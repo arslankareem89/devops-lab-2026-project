@@ -64,6 +64,17 @@ pipeline {
                               -Dsonar.projectKey=devops-lab-app \
                               -Dsonar.host.url="$SONAR_HOST_URL" \
                               -Dsonar.token="$SONAR_TOKEN"
+
+                            echo "--- scanner working dir contents ---"
+                            ls -la /workspace/ || true
+                            echo "--- locate report-task.txt ---"
+                            find /workspace -name 'report-task.txt' 2>/dev/null || true
+
+                            # withSonarQubeEnv / waitForQualityGate expect report-task.txt
+                            # in the Jenkins $WORKSPACE, so copy it there explicitly.
+                            cp /workspace/report-task.txt "$WORKSPACE/" 2>/dev/null \
+                              || echo "WARN: report-task.txt not found in /workspace"
+                            ls -la "$WORKSPACE/report-task.txt" 2>/dev/null || true
                         '''
                     }
                 }
