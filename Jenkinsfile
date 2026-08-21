@@ -51,6 +51,7 @@ pipeline {
                             echo "SonarQube URL: $SONAR_HOST_URL"
 
                             docker run --rm \
+                              --network ec2-user_default \
                               -v "$WORKSPACE_HOST:/workspace" \
                               -w /workspace \
                               -e SONAR_HOST_URL="$SONAR_HOST_URL" \
