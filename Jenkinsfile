@@ -1,7 +1,7 @@
 pipeline {
     agent any
     environment {
-        IMAGE_NAME = "arslankareem89/cloud-devops-app"
+        IMAGE_NAME = "arslankareed89/cloud-devops-app"
         APP_HOST   = "10.0.2.126"
     }
     stages {
@@ -20,14 +20,16 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 script {
-                    def workspaceHost = "/var/lib/docker/volumes/devops-lab_jenkins_home/_data/workspace/$(basename "$WORKSPACE")"
+                    def workspaceHost
                     withSonarQubeEnv('sonarqube') {
                         withCredentials([string(credentialsId: 'SONAR_TOKEN', variable: 'SONAR_TOKEN')]) {
                             sh """
-                                echo "SONAR_HOST_URL: "${SONAR_HOST_URL}"" 
-                                echo "SONAR_TOKEN length: "${env.SONAR_TOKEN ? env.SONAR_TOKEN.length() : 0}"" 
+                                WORKSPACE_HOST=\"/var/lib/docker/volumes/devops-lab_jenkins_home/_data/workspace/$(basename \"\$WORKSPACE\")\"
+                                echo "WORKSPACE_HOST: \${WORKSPACE_HOST}"
+                                echo "SONAR_HOST_URL: ${SONAR_HOST_URL}"
+                                echo "SONAR_TOKEN length: \${#SONAR_TOKEN}"
                                 docker run --rm \\
-                                  -v "${workspaceHost}:/workspace" \\
+                                  -v "\${WORKSPACE_HOST}:/workspace" \\
                                   -w /workspace \\
                                   -e SONAR_HOST_URL="${SONAR_HOST_URL}" \\
                                   -e SONAR_TOKEN="${env.SONAR_TOKEN}" \\
