@@ -2,10 +2,12 @@
 - name: Deploy CI services (Jenkins + SonarQube + PostgreSQL) to CI EC2
   hosts: ci
   become: yes
+
   vars:
     ci_compose_file: "docker-compose.ci.yml"
 
   tasks:
+
     - name: Create project directory
       file:
         path: /home/ec2-user/devops-lab
@@ -14,7 +16,7 @@
         group: ec2-user
         mode: '0755'
 
-    - name: Install Python3 on CI instance (needed for Jenkins operations)
+    - name: Install Python3 on CI instance
       dnf:
         name:
           - python3
@@ -25,16 +27,19 @@
       copy:
         src: "{{ playbook_dir }}/../../{{ ci_compose_file }}"
         dest: "/home/ec2-user/devops-lab/{{ ci_compose_file }}"
-      become: yes
+        owner: ec2-user
+        group: ec2-user
+        mode: '0644'
 
-    - name: Copy cloudwatch config
+    - name: Copy CloudWatch config
       copy:
         src: "{{ playbook_dir }}/../../docker/cloudwatch/"
         dest: "/home/ec2-user/devops-lab/docker/cloudwatch/"
-      become: yes
+        owner: ec2-user
+        group: ec2-user
 
-    - name: Remove existing CI containers
-      command: docker-compose -f {{ ci_compose_file }} down -v
+    - name: Remove existing CI containers without removing volumes
+      command: docker-compose -f {{ ci_compose_file }} down
       args:
         chdir: /home/ec2-user/devops-lab
       ignore_errors: true

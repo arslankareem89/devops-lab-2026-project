@@ -63,8 +63,17 @@ services:
     restart: unless-stopped
 
 volumes:
-  postgres_data:
-  sonarqube_data:
-  sonarqube_extensions:
-  sonarqube_logs:
   jenkins_home:
+    name: devops-lab_jenkins_home
+
+  postgres_data:
+    name: devops-lab_postgres_data
+
+  sonarqube_data:
+    name: devops-lab_sonarqube_data
+
+  sonarqube_extensions:
+    name: devops-lab_sonarqube_extensions
+
+  sonarqube_logs:
+    name: devops-lab_sonarqube_logs
