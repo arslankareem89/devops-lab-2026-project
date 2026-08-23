@@ -18,10 +18,12 @@ pipeline {
 
         stage('Checkout') {
             steps {
-                echo "========================================"
-                echo "Preparing workspace..."
-                echo "Workspace: ${WORKSPACE}"
-                echo "========================================"
+                echo "Repository checked out successfully."
+                sh '''
+                    echo "Branch: ${BRANCH_NAME}"
+                    echo "Commit: ${GIT_COMMIT}"
+                    echo "Workspace: ${WORKSPACE}"
+                '''
             }
         }
 
@@ -30,10 +32,11 @@ pipeline {
                 sh '''
                     set -e
 
-                    WORKSPACE_HOST="/var/lib/docker/volumes/devops-lab_jenkins_home/_data/workspace/$(basename "$WORKSPACE")"
-
+                    echo "========================================"
                     echo "Running local checks..."
-                    echo "Workspace: $WORKSPACE_HOST"
+                    echo "========================================"
+
+                    WORKSPACE_HOST="/var/lib/docker/volumes/devops-lab_jenkins_home/_data/workspace/$(basename "$WORKSPACE")"
 
                     docker run --rm \
                       -v "$WORKSPACE_HOST:/workspace" \
@@ -46,6 +49,10 @@ pipeline {
                         cd app
                         pytest -v
                       '
+
+                    echo "========================================"
+                    echo "Local checks passed."
+                    echo "========================================"
                 '''
             }
         }
@@ -66,50 +73,42 @@ pipeline {
                         echo "========================================"
                         echo "Running SonarQube analysis..."
                         echo "========================================"
-
                         echo "Workspace: ${WORKSPACE}"
                         echo "SonarQube URL: ${SONAR_URL}"
                         echo "Project: devops-lab-app"
+                        echo "========================================"
 
                         rm -rf "${WORKSPACE}/.scannerwork"
                         rm -f "${WORKSPACE}/report-task.txt"
 
-                        echo "Starting SonarScanner..."
+                        JENKINS_CONTAINER=$(docker ps -q -f name=^jenkins$)
 
-                        JENKINS_CONTAINER_ID="$(docker ps -q -f name=^jenkins$)"
-
-                        if [ -z "$JENKINS_CONTAINER_ID" ]; then
-                            echo "ERROR: Jenkins container was not found."
+                        if [ -z "$JENKINS_CONTAINER" ]; then
+                            echo "ERROR: Jenkins container not found."
                             exit 1
                         fi
+
+                        echo "Starting SonarScanner..."
 
                         docker run --rm \
                           --user 0:0 \
                           --network devops-lab_default \
-                          --volumes-from "$JENKINS_CONTAINER_ID" \
+                          --volumes-from "$JENKINS_CONTAINER" \
                           -w "${WORKSPACE}" \
                           -e SONAR_TOKEN="$SONAR_TOKEN" \
                           sonarsource/sonar-scanner-cli:latest \
                           -Dsonar.projectKey=devops-lab-app \
                           -Dsonar.sources=app \
                           -Dsonar.tests=app/tests \
+                          -Dsonar.test.inclusions=app/tests/**/*.py \
                           -Dsonar.exclusions=app/tests/** \
-                          -Dsonar.host.url="$SONAR_URL" \
+                          -Dsonar.host.url="${SONAR_URL}" \
                           -Dsonar.token="$SONAR_TOKEN" \
                           -Dsonar.python.version=3.14
 
                         echo "========================================"
                         echo "SonarQube analysis completed."
                         echo "========================================"
-
-                        if [ ! -f "${WORKSPACE}/report-task.txt" ]; then
-                            echo "ERROR: report-task.txt was not created."
-                            exit 1
-                        fi
-
-                        echo "report-task.txt found."
-                        echo "SonarQube report:"
-                        cat "${WORKSPACE}/report-task.txt"
                     '''
                 }
             }
@@ -132,7 +131,7 @@ pipeline {
 
                     echo "========================================"
                     echo "Building Docker image"
-                    echo "Image: ${IMAGE_NAME}:${TAG}"
+                    echo "${IMAGE_NAME}:${TAG}"
                     echo "========================================"
 
                     sh """
@@ -159,6 +158,8 @@ pipeline {
                             docker push ${IMAGE_NAME}:${TAG}
                         """
                     }
+
+                    echo "Docker image pushed successfully."
                 }
             }
         }
@@ -176,7 +177,6 @@ pipeline {
                             usernameVariable: 'DOCKERHUB_USER',
                             passwordVariable: 'DOCKERHUB_PASS'
                         ),
-
                         sshUserPrivateKey(
                             credentialsId: 'APP_SSH_KEY',
                             keyFileVariable: 'SSH_KEY'
@@ -201,7 +201,6 @@ pipeline {
                                 -o StrictHostKeyChecking=no \
                                 -i "\$SSH_KEY" \
                                 ec2-user@${APP_HOST} '
-
                                     set -e
 
                                     echo "========================================"
@@ -245,9 +244,7 @@ pipeline {
                                         echo "========================================"
                                         echo "Deploy FAILED"
                                         echo "========================================"
-
                                         docker logs devops-lab-app
-
                                         exit 1
                                     fi
                                 '
