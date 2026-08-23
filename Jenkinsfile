@@ -22,20 +22,29 @@ pipeline {
 
                     WORKSPACE_HOST="/var/lib/docker/volumes/devops-lab_jenkins_home/_data/workspace/$(basename "$WORKSPACE")"
 
+                    echo "========================================"
                     echo "Running local checks..."
                     echo "Workspace: $WORKSPACE_HOST"
+                    echo "========================================"
 
                     docker run --rm \
                       -v "$WORKSPACE_HOST:/workspace" \
                       -w /workspace \
                       python:3.14-slim \
-                      sh -c 'pip install --no-cache-dir -r app/requirements-dev.txt && ruff check app/ && cd app && pytest -v'
+                      sh -c '
+                        set -e
+                        pip install --no-cache-dir -r app/requirements-dev.txt
+                        ruff check app/
+                        cd app
+                        pytest -v
+                      '
                 '''
             }
         }
 
         stage('SonarQube Analysis') {
             steps {
+
                 withSonarQubeEnv('sonarqube') {
 
                     withCredentials([
@@ -51,13 +60,16 @@ pipeline {
                             WORKSPACE_HOST="/var/lib/docker/volumes/devops-lab_jenkins_home/_data/workspace/$(basename "$WORKSPACE")"
                             SONAR_HOST_URL="http://sonarqube:9000/sonar"
 
+                            echo "========================================"
                             echo "Running SonarQube analysis..."
                             echo "Workspace: $WORKSPACE_HOST"
                             echo "SonarQube URL: $SONAR_HOST_URL"
+                            echo "========================================"
 
                             rm -f "$WORKSPACE_HOST/report-task.txt"
 
                             docker run --rm \
+                              --user 0:0 \
                               --network devops-lab_default \
                               -v "$WORKSPACE_HOST:/workspace" \
                               -w /workspace \
@@ -70,16 +82,27 @@ pipeline {
                               -Dsonar.token="$SONAR_TOKEN" \
                               -Dsonar.scanner.metadataFilePath=/workspace/report-task.txt
 
+                            echo
                             echo "Checking SonarQube report file..."
 
                             if [ -f "$WORKSPACE_HOST/report-task.txt" ]; then
-                                echo "report-task.txt created successfully:"
+
+                                echo "SUCCESS: report-task.txt was created."
+                                echo
+                                echo "===== report-task.txt ====="
                                 cat "$WORKSPACE_HOST/report-task.txt"
-                                echo "SonarQube analysis completed successfully."
+                                echo "============================"
+                                echo
+
                             else
-                                echo "ERROR: report-task.txt was not created."
+
+                                echo "ERROR: report-task.txt was NOT created."
+                                echo "SonarQube analysis cannot continue to Quality Gate."
                                 exit 1
+
                             fi
+
+                            echo "SonarQube analysis completed successfully."
                         '''
                     }
                 }
@@ -88,7 +111,9 @@ pipeline {
 
         stage('Quality Gate') {
             steps {
+
                 timeout(time: 5, unit: 'MINUTES') {
+
                     waitForQualityGate abortPipeline: true
                 }
             }
@@ -96,12 +121,15 @@ pipeline {
 
         stage('Docker Build & Push') {
             steps {
+
                 script {
 
                     def TAG = env.BRANCH_NAME == 'main' ? 'latest' : 'dev'
 
-                    echo "Building Docker image:"
+                    echo "========================================"
+                    echo "Building Docker image"
                     echo "${IMAGE_NAME}:${TAG}"
+                    echo "========================================"
 
                     sh """
                         docker build \
@@ -118,12 +146,20 @@ pipeline {
                     ]) {
 
                         sh '''
+                            set -e
+
+                            echo "Logging into Docker Hub..."
+
                             echo "$DOCKERHUB_PASS" | docker login \
                                 -u "$DOCKERHUB_USER" \
                                 --password-stdin
                         '''
 
                         sh """
+                            set -e
+
+                            echo "Pushing image..."
+
                             docker push ${IMAGE_NAME}:${TAG}
                         """
                     }
@@ -133,6 +169,7 @@ pipeline {
 
         stage('Deploy') {
             steps {
+
                 script {
 
                     def TAG = env.BRANCH_NAME == 'main' ? 'latest' : 'dev'
@@ -143,6 +180,7 @@ pipeline {
                             usernameVariable: 'DOCKERHUB_USER',
                             passwordVariable: 'DOCKERHUB_PASS'
                         ),
+
                         sshUserPrivateKey(
                             credentialsId: 'APP_SSH_KEY',
                             keyFileVariable: 'SSH_KEY'
@@ -151,6 +189,8 @@ pipeline {
 
                         sh '''
                             set -e
+
+                            echo "Preparing SSH..."
 
                             mkdir -p ~/.ssh
                             chmod 700 ~/.ssh
@@ -163,6 +203,8 @@ pipeline {
                         '''
 
                         sh """
+                            set -e
+
                             ssh \
                                 -o StrictHostKeyChecking=no \
                                 -i "\$SSH_KEY" \
@@ -170,23 +212,31 @@ pipeline {
 
                                     set -e
 
-                                    echo "Logging into Docker Hub..."
+                                    echo "========================================"
+                                    echo "Docker Hub login"
+                                    echo "========================================"
 
                                     echo "${DOCKERHUB_PASS}" | docker login \
                                         -u "${DOCKERHUB_USER}" \
                                         --password-stdin
 
-                                    echo "Stopping old container..."
+                                    echo "========================================"
+                                    echo "Stopping old application"
+                                    echo "========================================"
 
                                     docker stop devops-lab-app 2>/dev/null || true
-
                                     docker rm devops-lab-app 2>/dev/null || true
 
-                                    echo "Pulling new image..."
+                                    echo "========================================"
+                                    echo "Pulling new image"
+                                    echo "${IMAGE_NAME}:${TAG}"
+                                    echo "========================================"
 
                                     docker pull ${IMAGE_NAME}:${TAG}
 
-                                    echo "Starting new container..."
+                                    echo "========================================"
+                                    echo "Starting application"
+                                    echo "========================================"
 
                                     docker run -d \
                                         --name devops-lab-app \
@@ -194,16 +244,29 @@ pipeline {
                                         -p 5000:5000 \
                                         ${IMAGE_NAME}:${TAG}
 
+                                    echo "Waiting for application..."
                                     sleep 5
 
-                                    echo "Checking application health..."
+                                    echo "========================================"
+                                    echo "Checking application health"
+                                    echo "========================================"
 
                                     if curl -sf http://localhost:5000/health; then
+
                                         echo
-                                        echo "Deploy OK"
+                                        echo "========================================"
+                                        echo "DEPLOY OK"
+                                        echo "========================================"
+
                                     else
+
                                         echo
-                                        echo "Deploy FAILED"
+                                        echo "========================================"
+                                        echo "DEPLOY FAILED"
+                                        echo "========================================"
+
+                                        docker logs devops-lab-app || true
+
                                         exit 1
                                     fi
                                 '
@@ -217,15 +280,20 @@ pipeline {
     post {
 
         always {
+            echo "Cleaning Jenkins workspace..."
             cleanWs()
         }
 
         success {
-            echo "Pipeline succeeded!"
+            echo "========================================"
+            echo "PIPELINE SUCCEEDED!"
+            echo "========================================"
         }
 
         failure {
-            echo "Pipeline failed!"
+            echo "========================================"
+            echo "PIPELINE FAILED!"
+            echo "========================================"
         }
     }
 }
