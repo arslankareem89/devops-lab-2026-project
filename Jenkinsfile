@@ -1,4 +1,5 @@
 pipeline {
+
     agent any
 
     environment {
@@ -28,7 +29,7 @@ pipeline {
                       -v "$WORKSPACE_HOST:/workspace" \
                       -w /workspace \
                       python:3.14-slim \
-                      sh -c 'pip install -r app/requirements-dev.txt && ruff check app/ && cd app && pytest -v'
+                      sh -c 'pip install --no-cache-dir -r app/requirements-dev.txt && ruff check app/ && cd app && pytest -v'
                 '''
             }
         }
@@ -36,22 +37,25 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 withSonarQubeEnv('sonarqube') {
+
                     withCredentials([
                         string(
                             credentialsId: 'SONAR_TOKEN',
                             variable: 'SONAR_TOKEN'
                         )
                     ]) {
+
                         sh '''
                             set -e
 
                             WORKSPACE_HOST="/var/lib/docker/volumes/devops-lab_jenkins_home/_data/workspace/$(basename "$WORKSPACE")"
-
-                            # SonarQube runs behind the /sonar web context on the devops-lab_default network
                             SONAR_HOST_URL="http://sonarqube:9000/sonar"
 
+                            echo "Running SonarQube analysis..."
                             echo "Workspace: $WORKSPACE_HOST"
                             echo "SonarQube URL: $SONAR_HOST_URL"
+
+                            rm -f "$WORKSPACE_HOST/report-task.txt"
 
                             docker run --rm \
                               --network devops-lab_default \
@@ -60,10 +64,22 @@ pipeline {
                               -e SONAR_HOST_URL="$SONAR_HOST_URL" \
                               -e SONAR_TOKEN="$SONAR_TOKEN" \
                               sonarsource/sonar-scanner-cli:latest \
-                              -Dsonar.sources=app \
                               -Dsonar.projectKey=devops-lab-app \
+                              -Dsonar.sources=app \
                               -Dsonar.host.url="$SONAR_HOST_URL" \
-                              -Dsonar.token="$SONAR_TOKEN"
+                              -Dsonar.token="$SONAR_TOKEN" \
+                              -Dsonar.scanner.metadataFilePath=/workspace/report-task.txt
+
+                            echo "Checking SonarQube report file..."
+
+                            if [ -f "$WORKSPACE_HOST/report-task.txt" ]; then
+                                echo "report-task.txt created successfully:"
+                                cat "$WORKSPACE_HOST/report-task.txt"
+                                echo "SonarQube analysis completed successfully."
+                            else
+                                echo "ERROR: report-task.txt was not created."
+                                exit 1
+                            fi
                         '''
                     }
                 }
@@ -81,6 +97,7 @@ pipeline {
         stage('Docker Build & Push') {
             steps {
                 script {
+
                     def TAG = env.BRANCH_NAME == 'main' ? 'latest' : 'dev'
 
                     echo "Building Docker image:"
@@ -99,6 +116,7 @@ pipeline {
                             passwordVariable: 'DOCKERHUB_PASS'
                         )
                     ]) {
+
                         sh '''
                             echo "$DOCKERHUB_PASS" | docker login \
                                 -u "$DOCKERHUB_USER" \
@@ -116,6 +134,7 @@ pipeline {
         stage('Deploy') {
             steps {
                 script {
+
                     def TAG = env.BRANCH_NAME == 'main' ? 'latest' : 'dev'
 
                     withCredentials([
@@ -135,18 +154,22 @@ pipeline {
 
                             mkdir -p ~/.ssh
                             chmod 700 ~/.ssh
-
                             chmod 600 "$SSH_KEY"
 
-                            ssh-keyscan -H "$APP_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+                            ssh-keyscan -H "$APP_HOST" \
+                                >> ~/.ssh/known_hosts 2>/dev/null || true
 
                             echo "Deploying to $APP_HOST"
                         '''
 
                         sh """
-                            ssh -o StrictHostKeyChecking=no \
-                                -i "$SSH_KEY" \
+                            ssh \
+                                -o StrictHostKeyChecking=no \
+                                -i "\$SSH_KEY" \
                                 ec2-user@${APP_HOST} '
+
+                                    set -e
+
                                     echo "Logging into Docker Hub..."
 
                                     echo "${DOCKERHUB_PASS}" | docker login \
@@ -176,8 +199,10 @@ pipeline {
                                     echo "Checking application health..."
 
                                     if curl -sf http://localhost:5000/health; then
+                                        echo
                                         echo "Deploy OK"
                                     else
+                                        echo
                                         echo "Deploy FAILED"
                                         exit 1
                                     fi
@@ -190,6 +215,7 @@ pipeline {
     }
 
     post {
+
         always {
             cleanWs()
         }
