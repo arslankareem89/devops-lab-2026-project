@@ -1,3 +1,4 @@
+
 pipeline {
 
     agent any
@@ -5,7 +6,6 @@ pipeline {
     environment {
         IMAGE_NAME = "arslankareem89/cloud-devops-app"
         APP_HOST   = "10.0.2.126"
-        SONAR_URL  = "http://sonarqube:9000/sonar"
     }
 
     stages {
@@ -19,6 +19,7 @@ pipeline {
         stage('Checkout') {
             steps {
                 echo "Repository checked out successfully."
+
                 sh '''
                     echo "Branch: ${BRANCH_NAME}"
                     echo "Commit: ${GIT_COMMIT}"
@@ -44,11 +45,14 @@ pipeline {
                       python:3.14-slim \
                       sh -c '
                         set -e
+
                         pip install --no-cache-dir -r app/requirements-dev.txt
+
                         ruff check app/
+
                         cd app
                         pytest -v
-                      '
+                    '
 
                     echo "========================================"
                     echo "Local checks passed."
@@ -59,21 +63,27 @@ pipeline {
 
         stage('SonarQube Analysis') {
             steps {
+
                 withSonarQubeEnv('SonarQube') {
+
                     sh '''
                         set -e
 
                         echo "========================================"
                         echo "Running SonarQube analysis..."
                         echo "========================================"
+
                         echo "Workspace: ${WORKSPACE}"
                         echo "SonarQube URL: ${SONAR_HOST_URL}"
                         echo "Project: devops-lab-app"
+
                         echo "========================================"
 
+                        # Clean previous SonarQube files
                         rm -rf "${WORKSPACE}/.scannerwork"
                         rm -f "${WORKSPACE}/report-task.txt"
 
+                        # Find Jenkins container
                         JENKINS_CONTAINER=$(docker ps -q -f name=^jenkins$)
 
                         if [ -z "$JENKINS_CONTAINER" ]; then
@@ -81,6 +91,7 @@ pipeline {
                             exit 1
                         fi
 
+                        echo "Jenkins container: $JENKINS_CONTAINER"
                         echo "Starting SonarScanner..."
 
                         docker run --rm \
@@ -89,34 +100,43 @@ pipeline {
                           --volumes-from "$JENKINS_CONTAINER" \
                           -w "${WORKSPACE}" \
                           -e SONAR_HOST_URL \
-                          -e SONAR_TOKEN=$SONAR_AUTH_TOKEN \
+                          -e SONAR_TOKEN="$SONAR_AUTH_TOKEN" \
                           --entrypoint sh \
                           sonarsource/sonar-scanner-cli:latest \
-                          -c "
+                          -c '
+                            set -e
+
+                            echo "SonarScanner started"
+
                             sonar-scanner \
                               -Dsonar.projectKey=devops-lab-app \
                               -Dsonar.sources=app \
                               -Dsonar.tests=app/tests \
                               -Dsonar.test.inclusions=app/tests/**/*.py \
                               -Dsonar.exclusions=app/tests/** \
-                              -Dsonar.host.url=${SONAR_HOST_URL} \
+                              -Dsonar.host.url="$SONAR_HOST_URL" \
+                              -Dsonar.token="$SONAR_TOKEN" \
                               -Dsonar.python.version=3.14
 
-                            echo '--- Copying report-task.txt to workspace ---'
-                            mkdir -p ${WORKSPACE}/.scannerwork
-                            if [ -f /tmp/.scannerwork/report-task.txt ]; then
-                              cp -v /tmp/.scannerwork/report-task.txt ${WORKSPACE}/.scannerwork/
-                              cp -v /tmp/.scannerwork/report-task.txt ${WORKSPACE}/
-                            fi
-                            ls -lh ${WORKSPACE}/.scannerwork/ || true
-                            cat ${WORKSPACE}/.scannerwork/report-task.txt || true
-                          "
+                            echo "SonarScanner finished successfully"
+                          '
 
                         echo "========================================"
-                        echo "SonarQube analysis completed."
+                        echo "Checking SonarQube report..."
                         echo "========================================"
-                        ls -lh "${WORKSPACE}/.scannerwork/report-task.txt"
-                        cat "${WORKSPACE}/.scannerwork/report-task.txt"
+
+                        if [ -f "${WORKSPACE}/.scannerwork/report-task.txt" ]; then
+                            echo "report-task.txt found:"
+                            cat "${WORKSPACE}/.scannerwork/report-task.txt"
+                        else
+                            echo "ERROR: report-task.txt was not created."
+                            echo "SonarQube scanner did not produce the expected report."
+                            exit 1
+                        fi
+
+                        echo "========================================"
+                        echo "SonarQube analysis completed successfully."
+                        echo "========================================"
                     '''
                 }
             }
@@ -180,15 +200,18 @@ pipeline {
                     def TAG = env.BRANCH_NAME == 'main' ? 'latest' : 'dev'
 
                     withCredentials([
+
                         usernamePassword(
                             credentialsId: 'dockerhub-creds',
                             usernameVariable: 'DOCKERHUB_USER',
                             passwordVariable: 'DOCKERHUB_PASS'
                         ),
+
                         sshUserPrivateKey(
                             credentialsId: 'APP_SSH_KEY',
                             keyFileVariable: 'SSH_KEY'
                         )
+
                     ]) {
 
                         sh '''
@@ -205,10 +228,12 @@ pipeline {
                         '''
 
                         sh """
+
                             ssh \
                                 -o StrictHostKeyChecking=no \
                                 -i "\$SSH_KEY" \
                                 ec2-user@${APP_HOST} '
+
                                     set -e
 
                                     echo "========================================"
@@ -222,6 +247,7 @@ pipeline {
                                     echo "Stopping old container..."
 
                                     docker stop devops-lab-app 2>/dev/null || true
+
                                     docker rm devops-lab-app 2>/dev/null || true
 
                                     echo "Pulling new image..."
@@ -243,17 +269,23 @@ pipeline {
                                     echo "Checking application health..."
 
                                     if curl -sf http://localhost:5000/health; then
+
                                         echo
                                         echo "========================================"
                                         echo "Deploy OK"
                                         echo "========================================"
+
                                     else
+
                                         echo
                                         echo "========================================"
                                         echo "Deploy FAILED"
                                         echo "========================================"
+
                                         docker logs devops-lab-app
+
                                         exit 1
+
                                     fi
                                 '
                         """
