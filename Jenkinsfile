@@ -18,13 +18,10 @@ pipeline {
 
         stage('Checkout') {
             steps {
-                echo "Repository checked out successfully."
-
-                sh '''
-                    echo "Branch: ${BRANCH_NAME}"
-                    echo "Commit: ${GIT_COMMIT}"
-                    echo "Workspace: ${WORKSPACE}"
-                '''
+                echo "========================================"
+                echo "Preparing workspace..."
+                echo "Workspace: ${WORKSPACE}"
+                echo "========================================"
             }
         }
 
@@ -33,30 +30,29 @@ pipeline {
                 sh '''
                     set -e
 
-                    echo "========================================"
-                    echo "Running local checks..."
-                    echo "========================================"
-
                     WORKSPACE_HOST="/var/lib/docker/volumes/devops-lab_jenkins_home/_data/workspace/$(basename "$WORKSPACE")"
+
+                    echo "Running local checks..."
+                    echo "Workspace: $WORKSPACE_HOST"
 
                     docker run --rm \
                       -v "$WORKSPACE_HOST:/workspace" \
                       -w /workspace \
                       python:3.14-slim \
                       sh -c '
-                        pip install --no-cache-dir -r app/requirements-dev.txt &&
-                        ruff check app/ &&
-                        cd app &&
+                        set -e
+                        pip install --no-cache-dir -r app/requirements-dev.txt
+                        ruff check app/
+                        cd app
                         pytest -v
                       '
-
-                    echo "Local checks passed."
                 '''
             }
         }
 
         stage('SonarQube Analysis') {
             steps {
+
                 withCredentials([
                     string(
                         credentialsId: 'SONAR_TOKEN',
@@ -71,6 +67,7 @@ pipeline {
                         echo "Running SonarQube analysis..."
                         echo "========================================"
 
+                        echo "Workspace: ${WORKSPACE}"
                         echo "SonarQube URL: ${SONAR_URL}"
                         echo "Project: devops-lab-app"
 
@@ -79,31 +76,39 @@ pipeline {
 
                         echo "Starting SonarScanner..."
 
+                        JENKINS_CONTAINER_ID="$(docker ps -q -f name=^jenkins$)"
+
+                        if [ -z "$JENKINS_CONTAINER_ID" ]; then
+                            echo "ERROR: Jenkins container was not found."
+                            exit 1
+                        fi
+
                         docker run --rm \
                           --user 0:0 \
                           --network devops-lab_default \
-                          --volumes-from "$(docker ps -q -f name=^jenkins$)" \
+                          --volumes-from "$JENKINS_CONTAINER_ID" \
                           -w "${WORKSPACE}" \
                           -e SONAR_TOKEN="$SONAR_TOKEN" \
                           sonarsource/sonar-scanner-cli:latest \
                           -Dsonar.projectKey=devops-lab-app \
                           -Dsonar.sources=app \
+                          -Dsonar.tests=app/tests \
+                          -Dsonar.exclusions=app/tests/** \
                           -Dsonar.host.url="$SONAR_URL" \
                           -Dsonar.token="$SONAR_TOKEN" \
-                          -Dsonar.python.version=3.14 \
-                          -Dsonar.tests=app/tests
+                          -Dsonar.python.version=3.14
 
                         echo "========================================"
                         echo "SonarQube analysis completed."
                         echo "========================================"
 
                         if [ ! -f "${WORKSPACE}/report-task.txt" ]; then
-                            echo "ERROR: SonarQube report-task.txt was not created."
+                            echo "ERROR: report-task.txt was not created."
                             exit 1
                         fi
 
-                        echo "SonarQube report-task.txt created successfully."
-
+                        echo "report-task.txt found."
+                        echo "SonarQube report:"
                         cat "${WORKSPACE}/report-task.txt"
                     '''
                 }
@@ -113,17 +118,14 @@ pipeline {
         stage('Quality Gate') {
             steps {
                 timeout(time: 5, unit: 'MINUTES') {
-                    echo "Waiting for SonarQube Quality Gate..."
-
                     waitForQualityGate abortPipeline: true
                 }
-
-                echo "SonarQube Quality Gate passed."
             }
         }
 
         stage('Docker Build & Push') {
             steps {
+
                 script {
 
                     def TAG = env.BRANCH_NAME == 'main' ? 'latest' : 'dev'
@@ -157,20 +159,18 @@ pipeline {
                             docker push ${IMAGE_NAME}:${TAG}
                         """
                     }
-
-                    echo "Docker image pushed successfully."
                 }
             }
         }
 
         stage('Deploy') {
             steps {
+
                 script {
 
                     def TAG = env.BRANCH_NAME == 'main' ? 'latest' : 'dev'
 
                     withCredentials([
-
                         usernamePassword(
                             credentialsId: 'dockerhub-creds',
                             usernameVariable: 'DOCKERHUB_USER',
@@ -181,7 +181,6 @@ pipeline {
                             credentialsId: 'APP_SSH_KEY',
                             keyFileVariable: 'SSH_KEY'
                         )
-
                     ]) {
 
                         sh '''
@@ -216,7 +215,6 @@ pipeline {
                                     echo "Stopping old container..."
 
                                     docker stop devops-lab-app 2>/dev/null || true
-
                                     docker rm devops-lab-app 2>/dev/null || true
 
                                     echo "Pulling new image..."
@@ -238,23 +236,19 @@ pipeline {
                                     echo "Checking application health..."
 
                                     if curl -sf http://localhost:5000/health; then
-
                                         echo
                                         echo "========================================"
-                                        echo "DEPLOY OK"
+                                        echo "Deploy OK"
                                         echo "========================================"
-
                                     else
-
                                         echo
                                         echo "========================================"
-                                        echo "DEPLOY FAILED"
+                                        echo "Deploy FAILED"
                                         echo "========================================"
 
                                         docker logs devops-lab-app
 
                                         exit 1
-
                                     fi
                                 '
                         """
@@ -272,14 +266,13 @@ pipeline {
 
         success {
             echo "========================================"
-            echo "PIPELINE SUCCEEDED!"
+            echo "Pipeline succeeded!"
             echo "========================================"
         }
 
         failure {
             echo "========================================"
-            echo "PIPELINE FAILED!"
-            echo "Check the failed stage logs."
+            echo "Pipeline failed!"
             echo "========================================"
         }
     }
