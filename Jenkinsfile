@@ -1,4 +1,5 @@
 pipeline {
+
     agent any
 
     environment {
@@ -30,6 +31,7 @@ pipeline {
             steps {
                 sh '''
                     set -e
+
                     echo "========================================"
                     echo "Running local checks..."
                     echo "========================================"
@@ -79,6 +81,8 @@ pipeline {
                             exit 1
                         fi
 
+                        echo "Starting SonarScanner..."
+
                         docker run --rm \
                           --user 0:0 \
                           --network devops-lab_default \
@@ -112,6 +116,7 @@ pipeline {
                         echo "SonarQube analysis completed."
                         echo "========================================"
                         ls -lh "${WORKSPACE}/.scannerwork/report-task.txt"
+                        cat "${WORKSPACE}/.scannerwork/report-task.txt"
                     '''
                 }
             }
@@ -127,7 +132,9 @@ pipeline {
 
         stage('Docker Build & Push') {
             steps {
+
                 script {
+
                     def TAG = env.BRANCH_NAME == 'main' ? 'latest' : 'dev'
 
                     echo "========================================"
@@ -148,11 +155,13 @@ pipeline {
                             passwordVariable: 'DOCKERHUB_PASS'
                         )
                     ]) {
+
                         sh '''
                             echo "$DOCKERHUB_PASS" | docker login \
                                 -u "$DOCKERHUB_USER" \
                                 --password-stdin
                         '''
+
                         sh """
                             docker push ${IMAGE_NAME}:${TAG}
                         """
@@ -165,7 +174,9 @@ pipeline {
 
         stage('Deploy') {
             steps {
+
                 script {
+
                     def TAG = env.BRANCH_NAME == 'main' ? 'latest' : 'dev'
 
                     withCredentials([
@@ -179,13 +190,17 @@ pipeline {
                             keyFileVariable: 'SSH_KEY'
                         )
                     ]) {
+
                         sh '''
                             set -e
+
                             mkdir -p ~/.ssh
                             chmod 700 ~/.ssh
                             chmod 600 "$SSH_KEY"
+
                             ssh-keyscan -H "$APP_HOST" \
                                 >> ~/.ssh/known_hosts 2>/dev/null || true
+
                             echo "Deploying to $APP_HOST"
                         '''
 
@@ -195,26 +210,38 @@ pipeline {
                                 -i "\$SSH_KEY" \
                                 ec2-user@${APP_HOST} '
                                     set -e
+
                                     echo "========================================"
                                     echo "Logging into Docker Hub..."
                                     echo "========================================"
+
                                     echo "${DOCKERHUB_PASS}" | docker login \
                                         -u "${DOCKERHUB_USER}" \
                                         --password-stdin
+
                                     echo "Stopping old container..."
+
                                     docker stop devops-lab-app 2>/dev/null || true
                                     docker rm devops-lab-app 2>/dev/null || true
+
                                     echo "Pulling new image..."
+
                                     docker pull ${IMAGE_NAME}:${TAG}
+
                                     echo "Starting new container..."
+
                                     docker run -d \
                                         --name devops-lab-app \
                                         --restart unless-stopped \
                                         -p 5000:5000 \
                                         ${IMAGE_NAME}:${TAG}
+
                                     echo "Waiting for application..."
+
                                     sleep 5
+
                                     echo "Checking application health..."
+
                                     if curl -sf http://localhost:5000/health; then
                                         echo
                                         echo "========================================"
@@ -237,14 +264,17 @@ pipeline {
     }
 
     post {
+
         always {
             cleanWs()
         }
+
         success {
             echo "========================================"
             echo "Pipeline succeeded!"
             echo "========================================"
         }
+
         failure {
             echo "========================================"
             echo "Pipeline failed!"
