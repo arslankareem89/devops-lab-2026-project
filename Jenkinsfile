@@ -1,4 +1,3 @@
-```groovy
 pipeline {
 
     agent any
@@ -6,13 +5,10 @@ pipeline {
     environment {
         IMAGE_NAME = "arslankareem89/cloud-devops-app"
         APP_HOST   = "10.0.2.126"
+        SONAR_URL  = "http://sonarqube:9000/sonar"
     }
 
     stages {
-
-        // =========================================================
-        // 1. CHECKOUT
-        // =========================================================
 
         stage('Checkout SCM') {
             steps {
@@ -20,226 +16,130 @@ pipeline {
             }
         }
 
-        stage('Checkout Verification') {
+        stage('Checkout') {
             steps {
-
-                echo "Repository checked out successfully."
-
-                sh '''
-                    set -e
-
-                    echo "========================================"
-                    echo "Git Information"
-                    echo "========================================"
-
-                    echo "Branch:"
-                    echo "${BRANCH_NAME}"
-
-                    echo "Commit:"
-                    git rev-parse HEAD
-
-                    echo "Commit message:"
-                    git log -1 --oneline
-
-                    echo "Remote:"
-                    git remote -v
-                '''
+                echo "========================================"
+                echo "Preparing workspace..."
+                echo "Workspace: ${WORKSPACE}"
+                echo "========================================"
             }
         }
-
-
-        // =========================================================
-        // 2. LOCAL CHECKS
-        // =========================================================
 
         stage('Local Check') {
             steps {
-
                 sh '''
                     set -e
 
-                    echo "========================================"
-                    echo "Running local checks..."
-                    echo "========================================"
-
                     WORKSPACE_HOST="/var/lib/docker/volumes/devops-lab_jenkins_home/_data/workspace/$(basename "$WORKSPACE")"
 
+                    echo "Running local checks..."
+                    echo "Workspace: $WORKSPACE_HOST"
+
                     docker run --rm \
-                        -v "$WORKSPACE_HOST:/workspace" \
-                        -w /workspace \
-                        python:3.14-slim \
-                        sh -c '
-                            set -e
-
-                            echo "Installing development dependencies..."
-
-                            pip install \
-                                --no-cache-dir \
-                                -r app/requirements-dev.txt
-
-                            echo "========================================"
-                            echo "Running Ruff"
-                            echo "========================================"
-
-                            ruff check app/
-
-                            echo "========================================"
-                            echo "Running Pytest"
-                            echo "========================================"
-
-                            cd app
-
-                            pytest -v
-                        '
-
-                    echo "========================================"
-                    echo "Local checks passed."
-                    echo "========================================"
+                      -v "$WORKSPACE_HOST:/workspace" \
+                      -w /workspace \
+                      python:3.14-slim \
+                      sh -c '
+                        set -e
+                        pip install --no-cache-dir -r app/requirements-dev.txt
+                        ruff check app/
+                        cd app
+                        pytest -v
+                      '
                 '''
             }
         }
-
-
-        // =========================================================
-        // 3. SONARQUBE ANALYSIS
-        // =========================================================
 
         stage('SonarQube Analysis') {
             steps {
 
-                withSonarQubeEnv('sonarqube') {
+                withCredentials([
+                    string(
+                        credentialsId: 'SONAR_TOKEN',
+                        variable: 'SONAR_TOKEN'
+                    )
+                ]) {
 
-                    withCredentials([
-                        string(
-                            credentialsId: 'SONAR_TOKEN',
-                            variable: 'SONAR_TOKEN'
-                        )
-                    ]) {
+                    sh '''
+                        set -e
 
-                        script {
+                        echo "========================================"
+                        echo "Running SonarQube analysis..."
+                        echo "========================================"
 
-                            /*
-                             * IMPORTANT:
-                             *
-                             * This name MUST exactly match:
-                             *
-                             * Manage Jenkins
-                             * → Tools
-                             * → SonarQube Scanner installations
-                             *
-                             * Name:
-                             * SonarQube Scanner
-                             */
+                        echo "Workspace: ${WORKSPACE}"
+                        echo "SonarQube URL: ${SONAR_URL}"
+                        echo "Project: devops-lab-app"
 
-                            def scannerHome = tool 'SonarQube Scanner'
+                        rm -rf "${WORKSPACE}/.scannerwork"
+                        rm -f "${WORKSPACE}/report-task.txt"
 
-                            echo "========================================"
-                            echo "SonarQube Configuration"
-                            echo "========================================"
+                        echo "Starting SonarScanner..."
 
-                            echo "Scanner:"
-                            echo "${scannerHome}"
+                        JENKINS_CONTAINER_ID="$(docker ps -q -f name=^jenkins$)"
 
-                            echo "SonarQube URL:"
-                            echo "${SONAR_HOST_URL}"
+                        if [ -z "$JENKINS_CONTAINER_ID" ]; then
+                            echo "ERROR: Jenkins container was not found."
+                            exit 1
+                        fi
 
-                            sh """
-                                set -e
+                        docker run --rm \
+                          --user 0:0 \
+                          --network devops-lab_default \
+                          --volumes-from "$JENKINS_CONTAINER_ID" \
+                          -w "${WORKSPACE}" \
+                          -e SONAR_TOKEN="$SONAR_TOKEN" \
+                          sonarsource/sonar-scanner-cli:latest \
+                          -Dsonar.projectKey=devops-lab-app \
+                          -Dsonar.sources=app \
+                          -Dsonar.tests=app/tests \
+                          -Dsonar.exclusions=app/tests/** \
+                          -Dsonar.host.url="$SONAR_URL" \
+                          -Dsonar.token="$SONAR_TOKEN" \
+                          -Dsonar.python.version=3.14
 
-                                echo "========================================"
-                                echo "SonarScanner Version"
-                                echo "========================================"
+                        echo "========================================"
+                        echo "SonarQube analysis completed."
+                        echo "========================================"
 
-                                ${scannerHome}/bin/sonar-scanner \
-                                    --version
+                        if [ ! -f "${WORKSPACE}/report-task.txt" ]; then
+                            echo "ERROR: report-task.txt was not created."
+                            exit 1
+                        fi
 
-                                echo "========================================"
-                                echo "Running SonarQube Analysis"
-                                echo "========================================"
-
-                                ${scannerHome}/bin/sonar-scanner \
-                                    -Dsonar.projectKey=devops-lab-app \
-                                    -Dsonar.sources=app \
-                                    -Dsonar.tests=app/tests \
-                                    -Dsonar.exclusions=app/tests/** \
-                                    -Dsonar.host.url="\$SONAR_HOST_URL" \
-                                    -Dsonar.token="\$SONAR_TOKEN" \
-                                    -Dsonar.python.version=3.14
-
-                                echo "========================================"
-                                echo "SonarQube Analysis Completed"
-                                echo "========================================"
-                            """
-                        }
-                    }
+                        echo "report-task.txt found."
+                        echo "SonarQube report:"
+                        cat "${WORKSPACE}/report-task.txt"
+                    '''
                 }
             }
         }
-
-
-        // =========================================================
-        // 4. QUALITY GATE
-        // =========================================================
 
         stage('Quality Gate') {
             steps {
-
-                timeout(
-                    time: 5,
-                    unit: 'MINUTES'
-                ) {
-
-                    echo "========================================"
-                    echo "Waiting for SonarQube Quality Gate..."
-                    echo "========================================"
-
-                    waitForQualityGate(
-                        abortPipeline: true
-                    )
-
-                    echo "========================================"
-                    echo "QUALITY GATE PASSED"
-                    echo "========================================"
+                timeout(time: 5, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
                 }
             }
         }
-
-
-        // =========================================================
-        // 5. DOCKER BUILD + PUSH
-        // =========================================================
 
         stage('Docker Build & Push') {
             steps {
 
                 script {
 
-                    def TAG =
-                        env.BRANCH_NAME == 'main'
-                            ? 'latest'
-                            : 'dev'
+                    def TAG = env.BRANCH_NAME == 'main' ? 'latest' : 'dev'
 
                     echo "========================================"
-                    echo "Docker Build"
+                    echo "Building Docker image"
+                    echo "Image: ${IMAGE_NAME}:${TAG}"
                     echo "========================================"
-
-                    echo "Image:"
-                    echo "${IMAGE_NAME}:${TAG}"
 
                     sh """
-                        set -e
-
                         docker build \
-                            -t ${IMAGE_NAME}:${TAG} \
-                            ./app
+                          -t ${IMAGE_NAME}:${TAG} \
+                          ./app
                     """
-
-                    echo "Docker image built successfully."
-
-
-                    // ---------------------------------------------
-                    // Docker Hub Login
-                    // ---------------------------------------------
 
                     withCredentials([
                         usernamePassword(
@@ -250,55 +150,27 @@ pipeline {
                     ]) {
 
                         sh '''
-                            set -e
-
-                            echo "========================================"
-                            echo "Docker Hub Login"
-                            echo "========================================"
-
-                            echo "$DOCKERHUB_PASS" | \
-                                docker login \
-                                    -u "$DOCKERHUB_USER" \
-                                    --password-stdin
-
-                            echo "Docker Hub login successful."
+                            echo "$DOCKERHUB_PASS" | docker login \
+                                -u "$DOCKERHUB_USER" \
+                                --password-stdin
                         '''
 
                         sh """
-                            set -e
-
-                            echo "========================================"
-                            echo "Pushing Docker Image"
-                            echo "========================================"
-
-                            docker push \
-                                ${IMAGE_NAME}:${TAG}
-
-                            echo "Docker image pushed successfully."
+                            docker push ${IMAGE_NAME}:${TAG}
                         """
                     }
                 }
             }
         }
 
-
-        // =========================================================
-        // 6. DEPLOY TO EC2
-        // =========================================================
-
         stage('Deploy') {
             steps {
 
                 script {
 
-                    def TAG =
-                        env.BRANCH_NAME == 'main'
-                            ? 'latest'
-                            : 'dev'
-
+                    def TAG = env.BRANCH_NAME == 'main' ? 'latest' : 'dev'
 
                     withCredentials([
-
                         usernamePassword(
                             credentialsId: 'dockerhub-creds',
                             usernameVariable: 'DOCKERHUB_USER',
@@ -309,47 +181,22 @@ pipeline {
                             credentialsId: 'APP_SSH_KEY',
                             keyFileVariable: 'SSH_KEY'
                         )
-
                     ]) {
-
-
-                        // -----------------------------------------
-                        // Prepare SSH
-                        // -----------------------------------------
 
                         sh '''
                             set -e
 
-                            echo "========================================"
-                            echo "Preparing SSH"
-                            echo "========================================"
-
                             mkdir -p ~/.ssh
-
                             chmod 700 ~/.ssh
-
                             chmod 600 "$SSH_KEY"
 
                             ssh-keyscan -H "$APP_HOST" \
-                                >> ~/.ssh/known_hosts \
-                                2>/dev/null || true
+                                >> ~/.ssh/known_hosts 2>/dev/null || true
 
-                            echo "Target:"
-                            echo "$APP_HOST"
+                            echo "Deploying to $APP_HOST"
                         '''
 
-
-                        // -----------------------------------------
-                        // Remote Deployment
-                        // -----------------------------------------
-
                         sh """
-                            set -e
-
-                            echo "========================================"
-                            echo "Connecting to Application EC2"
-                            echo "========================================"
-
                             ssh \
                                 -o StrictHostKeyChecking=no \
                                 -i "\$SSH_KEY" \
@@ -358,48 +205,23 @@ pipeline {
                                     set -e
 
                                     echo "========================================"
-                                    echo "Connected to EC2"
+                                    echo "Logging into Docker Hub..."
                                     echo "========================================"
 
-                                    echo "Hostname:"
-                                    hostname
+                                    echo "${DOCKERHUB_PASS}" | docker login \
+                                        -u "${DOCKERHUB_USER}" \
+                                        --password-stdin
 
-                                    echo "Private IP:"
-                                    hostname -I
+                                    echo "Stopping old container..."
 
+                                    docker stop devops-lab-app 2>/dev/null || true
+                                    docker rm devops-lab-app 2>/dev/null || true
 
-                                    echo "========================================"
-                                    echo "Docker Hub Login"
-                                    echo "========================================"
+                                    echo "Pulling new image..."
 
-                                    echo "${DOCKERHUB_PASS}" | \
-                                        docker login \
-                                            -u "${DOCKERHUB_USER}" \
-                                            --password-stdin
+                                    docker pull ${IMAGE_NAME}:${TAG}
 
-
-                                    echo "========================================"
-                                    echo "Stopping Old Container"
-                                    echo "========================================"
-
-                                    docker stop devops-lab-app \
-                                        2>/dev/null || true
-
-                                    docker rm devops-lab-app \
-                                        2>/dev/null || true
-
-
-                                    echo "========================================"
-                                    echo "Pulling New Image"
-                                    echo "========================================"
-
-                                    docker pull \
-                                        ${IMAGE_NAME}:${TAG}
-
-
-                                    echo "========================================"
-                                    echo "Starting New Container"
-                                    echo "========================================"
+                                    echo "Starting new container..."
 
                                     docker run -d \
                                         --name devops-lab-app \
@@ -407,38 +229,24 @@ pipeline {
                                         -p 5000:5000 \
                                         ${IMAGE_NAME}:${TAG}
 
-
-                                    echo "========================================"
-                                    echo "Waiting for Application"
-                                    echo "========================================"
+                                    echo "Waiting for application..."
 
                                     sleep 5
 
+                                    echo "Checking application health..."
 
-                                    echo "========================================"
-                                    echo "Health Check"
-                                    echo "========================================"
-
-                                    if curl -sf \
-                                        http://localhost:5000/health
-                                    then
-
+                                    if curl -sf http://localhost:5000/health; then
                                         echo
                                         echo "========================================"
-                                        echo "DEPLOY OK"
+                                        echo "Deploy OK"
                                         echo "========================================"
-
                                     else
-
                                         echo
                                         echo "========================================"
-                                        echo "DEPLOY FAILED"
+                                        echo "Deploy FAILED"
                                         echo "========================================"
 
-                                        echo "Container logs:"
-
-                                        docker logs \
-                                            devops-lab-app
+                                        docker logs devops-lab-app
 
                                         exit 1
                                     fi
@@ -450,30 +258,22 @@ pipeline {
         }
     }
 
-
-    // =============================================================
-    // POST ACTIONS
-    // =============================================================
-
     post {
 
         always {
-            echo "========================================"
-            echo "Pipeline completed."
-            echo "========================================"
+            cleanWs()
         }
 
         success {
             echo "========================================"
-            echo "PIPELINE SUCCEEDED"
+            echo "Pipeline succeeded!"
             echo "========================================"
         }
 
         failure {
             echo "========================================"
-            echo "PIPELINE FAILED"
+            echo "Pipeline failed!"
             echo "========================================"
         }
     }
 }
-```
