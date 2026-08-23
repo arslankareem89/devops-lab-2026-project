@@ -20,22 +20,33 @@ pipeline {
                 sh '''
                     set -e
 
-                    WORKSPACE_HOST="/var/lib/docker/volumes/devops-lab_jenkins_home/_data/workspace/$(basename "$WORKSPACE")"
-
+                    echo "========================================"
                     echo "Running local checks..."
-                    echo "Workspace: $WORKSPACE_HOST"
+                    echo "Workspace: $WORKSPACE"
+                    echo "========================================"
 
                     docker run --rm \
-                      -v "$WORKSPACE_HOST:/workspace" \
-                      -w /workspace \
+                      --volumes-from "$HOSTNAME" \
+                      -w "$WORKSPACE" \
                       python:3.14-slim \
-                      sh -c 'pip install --no-cache-dir -r app/requirements-dev.txt && ruff check app/ && cd app && pytest -v'
+                      sh -c '
+                        pip install --no-cache-dir \
+                          -r app/requirements-dev.txt &&
+                        ruff check app/ &&
+                        cd app &&
+                        pytest -v
+                      '
+
+                    echo "========================================"
+                    echo "Local checks passed."
+                    echo "========================================"
                 '''
             }
         }
 
         stage('SonarQube Analysis') {
             steps {
+
                 withSonarQubeEnv('sonarqube') {
 
                     withCredentials([
@@ -48,64 +59,57 @@ pipeline {
                         sh '''
                             set -e
 
-                            WORKSPACE_HOST="/var/lib/docker/volumes/devops-lab_jenkins_home/_data/workspace/$(basename "$WORKSPACE")"
-                            SONAR_HOST_URL="http://sonarqube:9000/sonar"
-
                             echo "========================================"
                             echo "Running SonarQube analysis..."
-                            echo "Workspace: $WORKSPACE_HOST"
+                            echo "Workspace: $WORKSPACE"
                             echo "SonarQube URL: $SONAR_HOST_URL"
                             echo "========================================"
 
-                            rm -rf "$WORKSPACE_HOST/.scannerwork"
-                            rm -f "$WORKSPACE_HOST/report-task.txt"
+                            # Remove previous scanner data
+                            rm -rf "$WORKSPACE/.scannerwork"
 
+                            # Run SonarScanner inside a container that shares
+                            # Jenkins' /var/jenkins_home volume.
                             docker run --rm \
                               --user 0:0 \
                               --network devops-lab_default \
-                              -v "$WORKSPACE_HOST:/workspace" \
-                              -w /workspace \
+                              --volumes-from "$HOSTNAME" \
+                              -w "$WORKSPACE" \
                               -e SONAR_HOST_URL="$SONAR_HOST_URL" \
                               -e SONAR_TOKEN="$SONAR_TOKEN" \
                               sonarsource/sonar-scanner-cli:latest \
                               -Dsonar.projectKey=devops-lab-app \
                               -Dsonar.sources=app \
                               -Dsonar.host.url="$SONAR_HOST_URL" \
-                              -Dsonar.token="$SONAR_TOKEN"
+                              -Dsonar.token="$SONAR_TOKEN" \
+                              -Dsonar.python.version=3.14 \
+                              -Dsonar.tests=app/tests
 
                             echo ""
                             echo "========================================"
-                            echo "Checking SonarQube report file..."
+                            echo "Checking SonarQube report..."
                             echo "========================================"
 
-                            if [ -f "$WORKSPACE_HOST/.scannerwork/report-task.txt" ]; then
-
-                                echo "report-task.txt found."
-
-                                cp "$WORKSPACE_HOST/.scannerwork/report-task.txt" \
-                                   "$WORKSPACE_HOST/report-task.txt"
-
-                                chmod 644 "$WORKSPACE_HOST/report-task.txt"
-
-                                echo "report-task.txt copied successfully."
-
+                            if [ -f "$WORKSPACE/.scannerwork/report-task.txt" ]; then
+                                echo "SUCCESS: SonarQube report-task.txt created."
                                 echo ""
-                                echo "===== report-task.txt ====="
-                                cat "$WORKSPACE_HOST/report-task.txt"
-                                echo "==========================="
-
+                                echo "Report:"
+                                cat "$WORKSPACE/.scannerwork/report-task.txt"
                             else
-
-                                echo "ERROR: .scannerwork/report-task.txt was NOT created."
+                                echo "ERROR: SonarQube report-task.txt was NOT created."
                                 echo ""
-                                echo "Scanner workspace contents:"
-                                ls -la "$WORKSPACE_HOST"
+                                echo "Workspace contents:"
+                                ls -la "$WORKSPACE"
                                 echo ""
-                                echo "Scanner working directory:"
-                                ls -la "$WORKSPACE_HOST/.scannerwork" 2>/dev/null || true
-
+                                echo "Scanner workspace:"
+                                ls -la "$WORKSPACE/.scannerwork" 2>/dev/null || true
                                 exit 1
                             fi
+
+                            echo ""
+                            echo "========================================"
+                            echo "SonarQube analysis completed successfully."
+                            echo "========================================"
                         '''
                     }
                 }
@@ -114,7 +118,9 @@ pipeline {
 
         stage('Quality Gate') {
             steps {
+
                 timeout(time: 5, unit: 'MINUTES') {
+
                     waitForQualityGate abortPipeline: true
                 }
             }
@@ -122,12 +128,15 @@ pipeline {
 
         stage('Docker Build & Push') {
             steps {
+
                 script {
 
                     def TAG = env.BRANCH_NAME == 'main' ? 'latest' : 'dev'
 
-                    echo "Building Docker image:"
+                    echo "========================================"
+                    echo "Building Docker image"
                     echo "${IMAGE_NAME}:${TAG}"
+                    echo "========================================"
 
                     sh """
                         docker build \
@@ -144,6 +153,8 @@ pipeline {
                     ]) {
 
                         sh '''
+                            set -e
+
                             echo "$DOCKERHUB_PASS" | docker login \
                                 -u "$DOCKERHUB_USER" \
                                 --password-stdin
@@ -153,26 +164,32 @@ pipeline {
                             docker push ${IMAGE_NAME}:${TAG}
                         """
                     }
+
+                    echo "Docker image pushed successfully."
                 }
             }
         }
 
         stage('Deploy') {
             steps {
+
                 script {
 
                     def TAG = env.BRANCH_NAME == 'main' ? 'latest' : 'dev'
 
                     withCredentials([
+
                         usernamePassword(
                             credentialsId: 'dockerhub-creds',
                             usernameVariable: 'DOCKERHUB_USER',
                             passwordVariable: 'DOCKERHUB_PASS'
                         ),
+
                         sshUserPrivateKey(
                             credentialsId: 'APP_SSH_KEY',
                             keyFileVariable: 'SSH_KEY'
                         )
+
                     ]) {
 
                         sh '''
@@ -189,6 +206,8 @@ pipeline {
                         '''
 
                         sh """
+                            set -e
+
                             ssh \
                                 -o StrictHostKeyChecking=no \
                                 -i "\$SSH_KEY" \
@@ -196,23 +215,30 @@ pipeline {
 
                                     set -e
 
+                                    echo "========================================"
                                     echo "Logging into Docker Hub..."
+                                    echo "========================================"
 
                                     echo "${DOCKERHUB_PASS}" | docker login \
                                         -u "${DOCKERHUB_USER}" \
                                         --password-stdin
 
+                                    echo "========================================"
                                     echo "Stopping old container..."
+                                    echo "========================================"
 
                                     docker stop devops-lab-app 2>/dev/null || true
-
                                     docker rm devops-lab-app 2>/dev/null || true
 
+                                    echo "========================================"
                                     echo "Pulling new image..."
+                                    echo "========================================"
 
                                     docker pull ${IMAGE_NAME}:${TAG}
 
+                                    echo "========================================"
                                     echo "Starting new container..."
+                                    echo "========================================"
 
                                     docker run -d \
                                         --name devops-lab-app \
@@ -220,22 +246,26 @@ pipeline {
                                         -p 5000:5000 \
                                         ${IMAGE_NAME}:${TAG}
 
+                                    echo "Waiting for application..."
                                     sleep 5
 
+                                    echo "========================================"
                                     echo "Checking application health..."
+                                    echo "========================================"
 
                                     if curl -sf http://localhost:5000/health; then
-
                                         echo
                                         echo "Deploy OK"
-
                                     else
-
                                         echo
                                         echo "Deploy FAILED"
+                                        docker logs devops-lab-app
                                         exit 1
-
                                     fi
+
+                                    echo "========================================"
+                                    echo "Deployment completed successfully."
+                                    echo "========================================"
                                 '
                         """
                     }
@@ -251,11 +281,15 @@ pipeline {
         }
 
         success {
+            echo "========================================"
             echo "Pipeline succeeded!"
+            echo "========================================"
         }
 
         failure {
+            echo "========================================"
             echo "Pipeline failed!"
+            echo "========================================"
         }
     }
 }
