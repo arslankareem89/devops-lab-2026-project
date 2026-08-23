@@ -11,13 +11,13 @@ pipeline {
 
         stage('Checkout') {
             steps {
-                checkout scm
-
                 echo "========================================"
                 echo "Repository checked out successfully."
                 echo "========================================"
 
                 sh '''
+                    set -e
+
                     echo "Branch: ${BRANCH_NAME}"
                     echo "Commit: ${GIT_COMMIT}"
                     echo "Workspace: ${WORKSPACE}"
@@ -34,41 +34,46 @@ pipeline {
                     echo "Running local checks..."
                     echo "========================================"
 
-                    WORKSPACE_HOST="/var/lib/docker/volumes/devops-lab_jenkins_home/_data/workspace/$(basename "$WORKSPACE")"
+                    JENKINS_CONTAINER="$(docker ps -q -f name=^jenkins$)"
 
-                    if [ ! -d "$WORKSPACE_HOST" ]; then
-                        echo "ERROR: Workspace mount does not exist:"
-                        echo "$WORKSPACE_HOST"
+                    if [ -z "$JENKINS_CONTAINER" ]; then
+                        echo "ERROR: Jenkins container not found."
                         exit 1
                     fi
 
-                    echo "Workspace mount:"
-                    echo "$WORKSPACE_HOST"
+                    echo "Jenkins container: $JENKINS_CONTAINER"
+                    echo "Jenkins workspace: $WORKSPACE"
+
+                    echo "Starting temporary Python container..."
 
                     docker run --rm \
                         --user 0:0 \
-                        -v "$WORKSPACE_HOST:/workspace" \
-                        -w /workspace \
+                        --volumes-from "$JENKINS_CONTAINER" \
+                        -w "$WORKSPACE" \
                         python:3.14-slim \
                         sh -c '
                             set -eu
 
-                            echo "Installing test dependencies..."
-                            pip install --no-cache-dir -r app/requirements-dev.txt
+                            echo "Installing development dependencies..."
+
+                            pip install --no-cache-dir \
+                                -r app/requirements-dev.txt
 
                             echo "Running Ruff..."
+
                             ruff check app/
 
                             echo "Running pytest..."
+
                             cd app
                             pytest -v
 
-                            echo "Local checks completed successfully."
+                            echo "Local checks inside container passed."
                         '
 
                     echo "========================================"
                     echo "Local checks passed."
-                    echo "Temporary test container removed."
+                    echo "Temporary Python container was removed."
                     echo "========================================"
                 '''
             }
@@ -92,12 +97,10 @@ pipeline {
 
                         echo "========================================"
 
-                        # Remove files from previous scanner runs.
+                        # Remove previous scanner output.
                         rm -rf "${WORKSPACE}/.scannerwork"
                         rm -f "${WORKSPACE}/report-task.txt"
 
-                        # Jenkins container must be running because the
-                        # scanner container uses the Jenkins workspace volume.
                         JENKINS_CONTAINER="$(docker ps -q -f name=^jenkins$)"
 
                         if [ -z "$JENKINS_CONTAINER" ]; then
@@ -107,29 +110,24 @@ pipeline {
 
                         echo "Jenkins container: $JENKINS_CONTAINER"
 
-                        # Remove a possible trailing slash.
-                        SONAR_URL="${SONAR_HOST_URL%/}"
-
-                        echo "Using SonarQube URL: $SONAR_URL"
-
-                        echo "========================================"
                         echo "Starting temporary SonarScanner container..."
-                        echo "========================================"
 
                         docker run --rm \
                             --user 0:0 \
                             --network devops-lab_default \
                             --volumes-from "$JENKINS_CONTAINER" \
-                            -w "${WORKSPACE}" \
+                            -w "$WORKSPACE" \
+                            -e SONAR_HOST_URL="$SONAR_HOST_URL" \
                             -e SONAR_TOKEN="$SONAR_AUTH_TOKEN" \
-                            -e SONAR_URL="$SONAR_URL" \
-                            --entrypoint sh \
                             sonarsource/sonar-scanner-cli:latest \
-                            -c '
+                            sh -c '
                                 set -eu
 
+                                echo "========================================"
                                 echo "SonarScanner started"
-                                echo "SonarQube URL: $SONAR_URL"
+                                echo "========================================"
+
+                                echo "SonarQube URL: $SONAR_HOST_URL"
 
                                 sonar-scanner \
                                     -Dsonar.projectKey=devops-lab-app \
@@ -137,30 +135,40 @@ pipeline {
                                     -Dsonar.tests=app/tests \
                                     -Dsonar.test.inclusions="app/tests/**/*.py" \
                                     -Dsonar.exclusions="app/tests/**" \
-                                    -Dsonar.host.url="$SONAR_URL" \
+                                    -Dsonar.host.url="$SONAR_HOST_URL" \
                                     -Dsonar.token="$SONAR_TOKEN" \
                                     -Dsonar.python.version=3.14
 
+                                echo "========================================"
                                 echo "SonarScanner finished successfully"
+                                echo "========================================"
                             '
 
                         echo "========================================"
-                        echo "SonarQube scanner completed."
-                        echo "Temporary SonarScanner container removed."
+                        echo "Checking SonarQube report..."
                         echo "========================================"
 
-                        if [ ! -f "${WORKSPACE}/.scannerwork/report-task.txt" ]; then
+                        if [ -f "${WORKSPACE}/.scannerwork/report-task.txt" ]; then
+
+                            echo "report-task.txt found:"
+                            cat "${WORKSPACE}/.scannerwork/report-task.txt"
+
+                        elif [ -f "${WORKSPACE}/report-task.txt" ]; then
+
+                            echo "report-task.txt found:"
+                            cat "${WORKSPACE}/report-task.txt"
+
+                        else
+
                             echo "ERROR: report-task.txt was not created."
-                            echo "The SonarScanner did not complete successfully."
+                            echo "SonarQube scanner did not complete successfully."
                             exit 1
+
                         fi
-
-                        echo "report-task.txt found."
-
-                        cat "${WORKSPACE}/.scannerwork/report-task.txt"
 
                         echo "========================================"
                         echo "SonarQube analysis completed successfully."
+                        echo "Temporary SonarScanner container was removed."
                         echo "========================================"
                     '''
                 }
@@ -169,8 +177,11 @@ pipeline {
 
         stage('Quality Gate') {
             steps {
+
                 timeout(time: 5, unit: 'MINUTES') {
+
                     waitForQualityGate abortPipeline: true
+
                 }
             }
         }
@@ -204,17 +215,29 @@ pipeline {
                         sh '''
                             set -eu
 
+                            echo "Logging into Docker Hub..."
+
                             echo "$DOCKERHUB_PASS" | docker login \
                                 -u "$DOCKERHUB_USER" \
                                 --password-stdin
                         '''
 
                         sh """
+                            echo "Pushing image..."
+
                             docker push ${IMAGE_NAME}:${TAG}
                         """
                     }
 
+                    echo "========================================"
                     echo "Docker image pushed successfully."
+                    echo "========================================"
+
+                    echo "Cleaning unused Docker build cache..."
+
+                    sh '''
+                        docker builder prune -f
+                    '''
                 }
             }
         }
@@ -227,6 +250,7 @@ pipeline {
                     def TAG = env.BRANCH_NAME == 'main' ? 'latest' : 'dev'
 
                     withCredentials([
+
                         usernamePassword(
                             credentialsId: 'dockerhub-creds',
                             usernameVariable: 'DOCKERHUB_USER',
@@ -237,6 +261,7 @@ pipeline {
                             credentialsId: 'APP_SSH_KEY',
                             keyFileVariable: 'SSH_KEY'
                         )
+
                     ]) {
 
                         sh '''
@@ -259,6 +284,7 @@ pipeline {
                                 -o StrictHostKeyChecking=no \
                                 -i "\$SSH_KEY" \
                                 ec2-user@${APP_HOST} '
+
                                     set -eu
 
                                     echo "========================================"
@@ -270,20 +296,20 @@ pipeline {
                                         --password-stdin
 
                                     echo "========================================"
-                                    echo "Stopping old application container..."
+                                    echo "Stopping old application..."
                                     echo "========================================"
 
                                     docker stop devops-lab-app 2>/dev/null || true
                                     docker rm devops-lab-app 2>/dev/null || true
 
                                     echo "========================================"
-                                    echo "Pulling new image..."
+                                    echo "Pulling image from Docker Hub..."
                                     echo "========================================"
 
                                     docker pull ${IMAGE_NAME}:${TAG}
 
                                     echo "========================================"
-                                    echo "Starting application..."
+                                    echo "Starting application container..."
                                     echo "========================================"
 
                                     docker run -d \
@@ -292,7 +318,10 @@ pipeline {
                                         -p 5000:5000 \
                                         ${IMAGE_NAME}:${TAG}
 
+                                    echo "========================================"
                                     echo "Waiting for application..."
+                                    echo "========================================"
+
                                     sleep 5
 
                                     echo "========================================"
@@ -300,28 +329,33 @@ pipeline {
                                     echo "========================================"
 
                                     if curl -sf http://localhost:5000/health; then
+
                                         echo
                                         echo "========================================"
-                                        echo "Deploy OK"
+                                        echo "DEPLOY OK"
                                         echo "========================================"
+
                                     else
+
                                         echo
                                         echo "========================================"
-                                        echo "Deploy FAILED"
+                                        echo "DEPLOY FAILED"
                                         echo "========================================"
 
                                         docker logs devops-lab-app
 
                                         exit 1
+
                                     fi
 
                                     echo "========================================"
-                                    echo "Removing unused Docker images..."
+                                    echo "Cleaning unused containers..."
                                     echo "========================================"
 
-                                    docker image prune -f
+                                    docker container prune -f
 
-                                    echo "Deployment completed."
+                                    echo "Deployment completed successfully."
+
                                 '
                         """
                     }
@@ -339,20 +373,23 @@ pipeline {
             echo "========================================"
 
             cleanWs()
+
         }
 
         success {
 
             echo "========================================"
-            echo "Pipeline succeeded!"
+            echo "PIPELINE SUCCEEDED!"
             echo "========================================"
+
         }
 
         failure {
 
             echo "========================================"
-            echo "Pipeline failed!"
+            echo "PIPELINE FAILED!"
             echo "========================================"
+
         }
     }
 }
