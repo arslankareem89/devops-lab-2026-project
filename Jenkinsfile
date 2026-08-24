@@ -144,7 +144,7 @@ pipeline {
                             -w "$WORKSPACE" \
                             -e "SONAR_HOST_URL=$SONAR_URL" \
                             -e "SONAR_TOKEN=$SONAR_AUTH_TOKEN" \
-                            sonarsource/sonar-scanner-cli:latest \
+                            sonarsource/sonar-scanner-cli:12.1.0.3233_8.0.1 \
                             sh -c '
                                 set -eu
 
@@ -162,7 +162,6 @@ pipeline {
                                     -Dsonar.sources=app \
                                     -Dsonar.tests=app/tests \
                                     -Dsonar.test.inclusions="app/tests/**/*.py" \
-                                    -Dsonar.exclusions="app/tests/**" \
                                     -Dsonar.host.url="$SONAR_HOST_URL" \
                                     -Dsonar.token="$SONAR_TOKEN" \
                                     -Dsonar.python.version=3.14
