@@ -3,14 +3,20 @@ pipeline {
     agent any
 
     environment {
+
         IMAGE_NAME = "arslankareem89/cloud-devops-app"
         APP_HOST   = "10.0.2.126"
+
+        // Valid image tag verified on your EC2 host
+        SONAR_SCANNER_IMAGE = "sonarsource/sonar-scanner-cli:12.1.0.3233_8.0.1"
     }
 
     stages {
 
         stage('Checkout') {
+
             steps {
+
                 echo "========================================"
                 echo "Checking out source code..."
                 echo "========================================"
@@ -29,7 +35,9 @@ pipeline {
 
 
         stage('Local Check') {
+
             steps {
+
                 sh '''
                     set -eu
 
@@ -66,6 +74,7 @@ pipeline {
                             echo "Running pytest..."
 
                             cd app
+
                             pytest -v
 
                             echo "Local checks passed."
@@ -81,6 +90,7 @@ pipeline {
 
 
         stage('SonarQube Analysis') {
+
             steps {
 
                 withSonarQubeEnv('SonarQube') {
@@ -101,12 +111,13 @@ pipeline {
 
                         echo "Jenkins container: $JENKINS_CONTAINER"
 
-                        # IMPORTANT:
-                        # Use the URL configured in Jenkins.
-                        # Your Jenkins configuration currently provides:
-                        # http://sonarqube:9000/sonar
+                        # Remove accidental whitespace/newlines
+                        SONAR_URL=$(printf '%s' "$SONAR_HOST_URL" | tr -d '[:space:]')
 
-                        SONAR_URL="$SONAR_HOST_URL"
+                        if [ -z "$SONAR_URL" ]; then
+                            echo "ERROR: SONAR_HOST_URL is empty."
+                            exit 1
+                        fi
 
                         echo "SonarQube URL: $SONAR_URL"
                         echo "Project: devops-lab-app"
@@ -121,17 +132,11 @@ pipeline {
                         docker run --rm \
                             --network devops-lab_default \
                             curlimages/curl:latest \
-                            sh -c "
-                                set -eu
+                            curl -fsS \
+                                "http://sonarqube:9000/sonar/api/system/status"
 
-                                echo 'Testing SonarQube...'
-
-                                curl -fsS \
-                                    'http://sonarqube:9000/sonar/api/system/status'
-
-                                echo
-                                echo 'SonarQube connectivity OK.'
-                            "
+                        echo
+                        echo "SonarQube connectivity OK."
 
                         echo "========================================"
                         echo "Starting temporary SonarScanner container..."
@@ -144,7 +149,7 @@ pipeline {
                             -w "$WORKSPACE" \
                             -e "SONAR_HOST_URL=$SONAR_URL" \
                             -e "SONAR_TOKEN=$SONAR_AUTH_TOKEN" \
-                            sonarsource/sonar-scanner-cli:12.1.0.3233_8.0.1 \
+                            "$SONAR_SCANNER_IMAGE" \
                             sh -c '
                                 set -eu
 
@@ -154,6 +159,9 @@ pipeline {
 
                                 echo "SonarQube URL: $SONAR_HOST_URL"
 
+                                echo "Scanner version:"
+                                sonar-scanner --version
+
                                 echo "Running analysis..."
 
                                 sonar-scanner \
@@ -162,6 +170,7 @@ pipeline {
                                     -Dsonar.sources=app \
                                     -Dsonar.tests=app/tests \
                                     -Dsonar.test.inclusions="app/tests/**/*.py" \
+                                    -Dsonar.exclusions="app/tests/**" \
                                     -Dsonar.host.url="$SONAR_HOST_URL" \
                                     -Dsonar.token="$SONAR_TOKEN" \
                                     -Dsonar.python.version=3.14
@@ -199,6 +208,7 @@ pipeline {
 
 
         stage('Quality Gate') {
+
             steps {
 
                 echo "========================================"
@@ -208,13 +218,13 @@ pipeline {
                 timeout(time: 5, unit: 'MINUTES') {
 
                     waitForQualityGate abortPipeline: false
-
                 }
             }
         }
 
 
         stage('Docker Build & Push') {
+
             steps {
 
                 script {
@@ -233,11 +243,13 @@ pipeline {
                     """
 
                     withCredentials([
+
                         usernamePassword(
                             credentialsId: 'dockerhub-creds',
                             usernameVariable: 'DOCKERHUB_USER',
                             passwordVariable: 'DOCKERHUB_PASS'
                         )
+
                     ]) {
 
                         sh '''
@@ -262,6 +274,7 @@ pipeline {
 
 
         stage('Remove Local Build Image') {
+
             steps {
 
                 script {
@@ -283,6 +296,7 @@ pipeline {
 
 
         stage('Deploy') {
+
             steps {
 
                 script {
@@ -308,6 +322,7 @@ pipeline {
                             set -eu
 
                             mkdir -p ~/.ssh
+
                             chmod 700 ~/.ssh
                             chmod 600 "$SSH_KEY"
 
@@ -316,6 +331,7 @@ pipeline {
                         '''
 
                         sh """
+
                             ssh \
                                 -o StrictHostKeyChecking=no \
                                 -i "\$SSH_KEY" \
@@ -344,7 +360,7 @@ pipeline {
                                     docker rm devops-lab-app 2>/dev/null || true
 
 
-                                    echo "Removing unused application image..."
+                                    echo "Removing old application image..."
 
                                     docker image rm \
                                         ${IMAGE_NAME}:${TAG} \
@@ -399,7 +415,6 @@ pipeline {
                                     echo "========================================"
 
                                     docker container prune -f
-
                                     docker image prune -f
 
                                     echo "Cleanup completed."
@@ -422,7 +437,6 @@ pipeline {
             echo "========================================"
 
             cleanWs()
-
         }
 
 
@@ -431,7 +445,6 @@ pipeline {
             echo "========================================"
             echo "PIPELINE SUCCEEDED"
             echo "========================================"
-
         }
 
 
@@ -440,8 +453,6 @@ pipeline {
             echo "========================================"
             echo "PIPELINE FAILED"
             echo "========================================"
-
         }
     }
-    
 }
